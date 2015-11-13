@@ -2,7 +2,7 @@ name:                linode
 version:             0.1.0.0
 synopsis:            Bindings to the Linode API
 description:         Please see README.md
-homepage:            http://github.com/Helkafen/linode#readme
+homepage:            http://github.com/Helkafen/haskell-linode#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Sebastian de Bellefon
