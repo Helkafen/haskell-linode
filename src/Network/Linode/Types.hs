@@ -24,10 +24,10 @@ data LinodeCreationOptions = LinodeCreationOptions {
 
 
 newtype ConfigId = ConfigId Int
-  deriving (Eq, Show, Read, Generic)
+  deriving (Eq, Show, Generic)
 
 newtype DatacenterId = DatacenterId Int
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Show)
 
 newtype DistributionId = DistributionId Int
   deriving (Eq, Ord, Show)
@@ -36,7 +36,7 @@ newtype DiskId = DiskId Int
   deriving (Eq, Show)
 
 newtype InstanceId = InstanceId Int
-  deriving (Eq, Ord, Show, Read, Generic)
+  deriving (Eq, Ord, Show, Generic)
 
 newtype JobId = JobId Int
   deriving (Eq, Show)
@@ -70,11 +70,16 @@ data AccountInfo = AccountInfo {
   accountBillingMethod    :: Text
 } deriving (Eq, Show)
 
+data Address = Address {
+  ip       :: String,
+  rdnsName :: String
+} deriving (Eq, Show, Generic)
+
 data Datacenter = Datacenter {
   datacenterId       :: DatacenterId,
   datacenterLocation :: Text,
   datacenterName     :: Text
-} deriving (Eq, Show, Read)
+} deriving (Eq, Show)
 
 data Distribution = Distribution {
   distributionId      :: DistributionId,
@@ -170,12 +175,14 @@ data Linode = Linode {
   linodeConfigId       :: ConfigId,
   linodeDatacenterName :: Text,
   linodePassword       :: String,
-  linodeIpAddress      :: String
-} deriving (Eq, Show, Read, Generic)
+  linodeAddresses      :: [Address]
+} deriving (Eq, Show, Generic)
 
 instance Binary ConfigId
 
 instance Binary InstanceId
+
+instance Binary Address
 
 instance Binary Linode
 

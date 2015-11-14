@@ -75,7 +75,8 @@ createLinode apiKey log options = do
           (CreatedDisk swapId swapJobId) <- wait >> createSwapDisk apiKey instId "swap" swapSize
           (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profileLabel" [diskId, swapId])
           (BootedInstance bootJobId) <- wait >> boot apiKey instId configId
-          return $ Linode instId configId (datacenterName datacenter) (password options) ""
+          addresses <- wait >> getIpList apiKey instId
+          return $ Linode instId configId (datacenterName datacenter) (password options) addresses
 
 {-|
 Create a Linode cluster with everything set up.
@@ -157,6 +158,12 @@ The smallest plan is Linode 1024.
 -}
 getPlans :: String -> ExceptT LinodeError IO [Plan]
 getPlans = get . planListQuery
+
+{-|
+Read all IP addresses of an instance.
+-}
+getIpList :: String -> InstanceId -> ExceptT LinodeError IO [Address]
+getIpList apiKey instId = get $ ipListQuery apiKey instId
 
 {-|
 Create a Linode Config (a bag of instance options).

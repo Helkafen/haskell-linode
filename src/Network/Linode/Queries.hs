@@ -69,6 +69,11 @@ createDiskQuery apiKey (InstanceId i) label diskType size =
     <> "&Type=" <> diskTypeToString diskType
     <> "&size=" <> show size
 
+ipListQuery :: String -> InstanceId -> String
+ipListQuery apiKey (InstanceId i) =
+  query "linode.ip.list" apiKey
+    <> "&LinodeID=" <> show i
+
 jobListQuery :: String -> InstanceId -> String
 jobListQuery apiKey (InstanceId i) =
   query "linode.job.list" apiKey

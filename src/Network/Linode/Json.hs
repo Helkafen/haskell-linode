@@ -57,6 +57,11 @@ instance FromJSON Instance where
              <*> pure (fromJust status)
       where isTrue = (== (1::Int))
 
+
+instance FromJSON Address where
+  parseJSON (Object v) = Address <$> v .: "IPADDRESS" <*> v .: "RDNS_NAME"
+
+
 instance FromJSON Kernel where
   parseJSON = withObject "kernel" $ \o -> do
     xen <- o .: "ISXEN"
