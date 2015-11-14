@@ -31,7 +31,7 @@ import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Error
 import           Control.Lens
-import           Control.Monad            (unless, void)
+import           Control.Monad            (unless, void, when)
 import           Control.Monad.IO.Class   (liftIO)
 import           Data.Aeson               (decode)
 import           Data.List                (find)
@@ -66,17 +66,24 @@ createLinode apiKey log options = do
   where create :: ExceptT LinodeError IO (InstanceId, (Datacenter, Distribution, Plan, Kernel)) = do
           (datacenter, distribution, plan, kernel) <- select apiKey options
           CreatedInstance instId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
+          printLog "Created empty linode"
           return (instId, (datacenter, distribution, plan, kernel))
         configure instId options (datacenter, distribution, plan, kernel) = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
           let wait = liftIO (waitUntilCompletion apiKey instId)
           (CreatedDisk diskId diskJobId) <- wait >> createDiskFromDistribution apiKey instId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
+          printLog $ "Created disk (" ++ show rootDiskSize ++ " MB)"
           (CreatedDisk swapId swapJobId) <- wait >> createSwapDisk apiKey instId "swap" swapSize
+          printLog $ "Created swap (" ++ show swapSize ++ " MB)"
           (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profileLabel" [diskId, swapId])
+          printLog $ "Created config: " ++ show configId
           (BootedInstance bootJobId) <- wait >> boot apiKey instId configId
           addresses <- wait >> getIpList apiKey instId
+          printLog $ "Booted linode " ++ show instId
           return $ Linode instId configId (datacenterName datacenter) (password options) addresses
+        printLog l = when log (liftIO $ putStrLn l)
+        
 
 {-|
 Create a Linode cluster with everything set up.

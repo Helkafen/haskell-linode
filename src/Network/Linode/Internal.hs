@@ -55,13 +55,3 @@ fetchAndSelect fetch select name = do
     Right xs -> case select xs of
       Nothing -> throwE $ SelectionError ("Error: Selection of " <> name <> " returned no value")
       Just x -> return x
-
-
-logger :: (Show a) => Bool -> IO (Either LinodeError a) -> IO (Either LinodeError a)
-logger log p = do
-  x <- p
-  case x of
-    Left e -> return $ Left e
-    Right a -> do
-      when log (print a)
-      return $ Right a
