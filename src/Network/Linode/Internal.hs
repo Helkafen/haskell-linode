@@ -28,11 +28,36 @@ parseResponse body = case decode body of
   otherwise -> Left err
   where err = DeserializationError (E.decodeUtf8 $ B.toStrict body)
 
+
+diskTypeToString :: DiskType -> String
+diskTypeToString Ext3 = "ext3"
+diskTypeToString Ext4 = "ext4"
+diskTypeToString Swap = "swap"
+diskTypeToString RawDisk = "raw"
+
+paymentTermToInt :: PaymentTerm -> Int
+paymentTermToInt OneMonth = 1
+paymentTermToInt OneYear = 12
+paymentTermToInt TwoYears = 24
+
+query :: String -> String -> String
+query action apiKey = "https://api.linode.com/?api_key=" <> apiKey <> "&api_action=" <> action
+
+
 get :: FromJSON a => String -> ExceptT LinodeError IO a
 get url = ExceptT g
   where g = handle (\(e :: IOException) -> return (Left $ NetworkError e)) $ do
               response <- W.get url
               return $ parseResponse (fromMaybe B.empty (response ^? W.responseBody))
+
+getWith :: FromJSON a => W.Options -> String -> ExceptT LinodeError IO a
+getWith opts url = ExceptT g
+  where g = handle (\(e :: IOException) -> return (Left $ NetworkError e)) $ do
+              response <- W.getWith opts url
+              return $ parseResponse (fromMaybe B.empty (response ^? W.responseBody))
+
+noParamQuery :: FromJSON a => String -> String -> ExceptT LinodeError IO a
+noParamQuery action apiKey = getWith W.defaults (query action apiKey)
 
 maybeOr ::  Monad m => Maybe a -> ExceptT e m a -> ExceptT e m a
 maybeOr v p = maybe p return v

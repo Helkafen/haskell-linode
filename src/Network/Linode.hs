@@ -37,17 +37,25 @@ import           Data.Aeson               (decode)
 import           Data.List                (find)
 import           Data.Monoid              ((<>))
 import qualified Data.Text                as T
+import qualified Network.Wreq             as W
 
 import           Network.Linode.Internal
-import           Network.Linode.Queries
 import           Network.Linode.Types
 
 test :: IO ()
 test = do
   apiKey <- fmap (filter (/= '\n')) (readFile "apiKey")
+  idrsa <- fmap (filter (/= '\n')) (readFile "idrsa")
   let log = True
-  c <- createLinode apiKey log defaultLinodeCreationOptions
-  print c
+  let options = defaultLinodeCreationOptions {
+    datacenterSelect = find ((=="atlanta") . datacenterName),
+    planSelect = find ((=="Linode 1024") . planName),
+    sshKey = Just idrsa
+  }
+  c <- createLinode apiKey log options
+  case c of
+    Left e -> print e
+    Right l -> print l
 
 
 {-|
@@ -65,25 +73,25 @@ createLinode apiKey log options = do
         Right l -> return $ Right l
   where create :: ExceptT LinodeError IO (InstanceId, (Datacenter, Distribution, Plan, Kernel)) = do
           (datacenter, distribution, plan, kernel) <- select apiKey options
+          printLog "Creating empty linode"
           CreatedInstance instId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
-          printLog "Created empty linode"
           return (instId, (datacenter, distribution, plan, kernel))
         configure instId options (datacenter, distribution, plan, kernel) = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
           let wait = liftIO (waitUntilCompletion apiKey instId)
+          printLog $ "Creating disk (" ++ show rootDiskSize ++ " MB)"
           (CreatedDisk diskId diskJobId) <- wait >> createDiskFromDistribution apiKey instId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
-          printLog $ "Created disk (" ++ show rootDiskSize ++ " MB)"
+          printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
           (CreatedDisk swapId swapJobId) <- wait >> createSwapDisk apiKey instId "swap" swapSize
-          printLog $ "Created swap (" ++ show swapSize ++ " MB)"
+          printLog "Creating config"
           (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profileLabel" [diskId, swapId])
-          printLog $ "Created config: " ++ show configId
           (BootedInstance bootJobId) <- wait >> boot apiKey instId configId
           addresses <- wait >> getIpList apiKey instId
-          printLog $ "Booted linode " ++ show instId
+          printLog $ "Booted linode " ++ show instId ++ "with config " ++ show configId
           return $ Linode instId configId (datacenterName datacenter) (password options) addresses
         printLog l = when log (liftIO $ putStrLn l)
-        
+
 
 {-|
 Create a Linode cluster with everything set up.
@@ -120,7 +128,9 @@ defaultLinodeCreationOptions = LinodeCreationOptions {
 Delete a Linode instance.
 -}
 deleteInstance :: String -> InstanceId -> ExceptT LinodeError IO DeletedInstance
-deleteInstance apiKey inst = get $ deleteInstanceQuery apiKey inst
+deleteInstance apiKey (InstanceId i) = do
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+  getWith opts (query "linode.delete" apiKey)
 
 {-|
 Delete a list of Linode instances.
@@ -133,88 +143,136 @@ deleteCluster apiKey = runExceptT . mapM_ (deleteInstance apiKey)
 Read your global account information: network usage, billing state and billing method.
 -}
 getAccountInfo :: String -> ExceptT LinodeError IO AccountInfo
-getAccountInfo = get . accountInfoQuery
+getAccountInfo = noParamQuery "account.info"
 
 {-|
 Read all Linode datacenters: dallas, fremont, atlanta, newark, london, tokyo, singapore, frankfurt
 -}
 getDatacenters :: String -> ExceptT LinodeError IO [Datacenter]
-getDatacenters = get . datacenterListQuery
+getDatacenters = noParamQuery "avail.datacenters"
 
 {-|
 Read all available Linux distributions. For example, Debian 8.1 has id 140.
 -}
 getDistributions :: String -> ExceptT LinodeError IO [Distribution]
-getDistributions = get . distributionListQuery
+getDistributions = noParamQuery "avail.distributions"
 
 {-|
 Read all your instances.
 -}
 getInstances :: String -> ExceptT LinodeError IO [Instance]
-getInstances = get . linodeListQuery
+getInstances = noParamQuery "linode.list"
 
 {-|
 Read all available Linux kernels.
 -}
 getKernels :: String -> ExceptT LinodeError IO [Kernel]
-getKernels = get . kernelListQuery
+getKernels = noParamQuery "avail.kernels"
 
 {-|
 Read all plans offered by Linode. A plan specifies the available CPU, RAM, network usage and pricing of an instance.
 The smallest plan is Linode 1024.
 -}
 getPlans :: String -> ExceptT LinodeError IO [Plan]
-getPlans = get . planListQuery
+getPlans = noParamQuery "avail.linodeplans"
 
 {-|
 Read all IP addresses of an instance.
 -}
 getIpList :: String -> InstanceId -> ExceptT LinodeError IO [Address]
-getIpList apiKey instId = get $ ipListQuery apiKey instId
+getIpList apiKey (InstanceId i) = do
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+  getWith opts (query "linode.ip.list" apiKey)
 
 {-|
 Create a Linode Config (a bag of instance options).
 -}
 createConfig :: String -> InstanceId -> KernelId -> String -> [DiskId] -> ExceptT LinodeError IO CreatedConfig
-createConfig apiKey instId kernelId label disksIds = get $ createConfigQuery apiKey instId kernelId label disksIds
+createConfig apiKey (InstanceId i) (KernelId k) label disksIds = do
+  let unDisk (DiskId i) = i
+  let disksList = T.intercalate "," $ take 9 $ map (T.pack . show . unDisk) disksIds ++ repeat ""
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                        & W.param "KernelID" .~ [T.pack $ show k]
+                        & W.param "Label" .~ [T.pack label]
+                        & W.param "DiskList" .~ [disksList]
+                        & W.param "helper_distro" .~ ["true"]
+                        & W.param "helper_network" .~ ["true"]
+  getWith opts (query "linode.config.create" apiKey)
 
 {-|
 Create a disk from a supported Linux distribution.
 -}
 createDiskFromDistribution :: String -> InstanceId -> DistributionId -> String -> Int -> String -> Maybe String -> ExceptT LinodeError IO CreatedDisk
-createDiskFromDistribution apiKey instanceId distributionId label size pass sshKey = get $ createDistFromDistributionQuery apiKey instanceId distributionId label size pass sshKey
+createDiskFromDistribution apiKey (InstanceId i) (DistributionId d) label size pass sshKey = do
+    let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                          & W.param "DistributionID" .~ [T.pack $ show d]
+                          & W.param "Label" .~ [T.pack label]
+                          & W.param "Size" .~ [T.pack $ show size]
+                          & W.param "rootPass" .~ [T.pack pass]
+                          & case T.pack <$> sshKey of
+                              Nothing -> id
+                              Just k -> W.param "rootSSHKey" .~ [k]
+    getWith opts (query "linode.disk.createfromdistribution" apiKey)
 
 {-|
 Create a Linode instance with no disk and no configuration. You probably want createLinode.
 -}
 createDisklessLinode :: String -> DatacenterId -> PlanId -> PaymentTerm -> ExceptT LinodeError IO CreatedInstance
-createDisklessLinode apiKey datacenter plan paymentTerm = get $ createInstanceQuery apiKey datacenter plan paymentTerm
+createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = do
+  let opts = W.defaults & W.param "DatacenterID" .~ [T.pack $ show d]
+                        & W.param "PlanID" .~ [T.pack $ show p]
+                        & W.param "PaymentTerm" .~ [T.pack $ show (paymentTermToInt paymentTerm)]
+  getWith opts (query "linode.create" apiKey)
+
 
 {-|
 Create a swap partition.
 -}
 createSwapDisk :: String -> InstanceId -> String -> Int -> ExceptT LinodeError IO CreatedDisk
-createSwapDisk apiKey instanceId label size = get $ createDiskQuery apiKey instanceId label Swap size
+createSwapDisk apiKey instanceId label = createDisk apiKey instanceId label Swap
 
+{-|
+Create a partition.
+-}
+createDisk :: String -> InstanceId -> String -> DiskType -> Int -> ExceptT LinodeError IO CreatedDisk
+createDisk apiKey (InstanceId i) label diskType size = do
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                        & W.param "Label" .~ [T.pack label]
+                        & W.param "Type" .~ [T.pack (diskTypeToString diskType)]
+                        & W.param "size" .~ [T.pack $ show size]
+  getWith opts (query "linode.disk.create" apiKey)
 
 
 {-|
 Boot an Linode instance.
 -}
 boot :: String-> InstanceId -> ConfigId -> ExceptT LinodeError IO BootedInstance
-boot apiKey instId configId = get $ bootQuery apiKey instId configId
+boot apiKey (InstanceId i) (ConfigId c) = do
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                        & W.param "ConfigID" .~ [T.pack $ show c]
+  getWith opts (query "linode.boot" apiKey)
+
+
+{-|
+List of pending jobs for this Linode instance.
+-}
+jobList :: String -> InstanceId -> ExceptT LinodeError IO [WaitingJob]
+jobList apiKey (InstanceId i) = do
+  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                        & W.param "pendingOnly" .~ ["true"]
+  getWith opts (query "linode.job.list" apiKey)
 
 {-|
 Wait until all operations on one instance are finished.
 -}
 waitUntilCompletion :: String -> InstanceId -> IO()
 waitUntilCompletion apiKey instId = do
-  waitingJobs <- runExceptT $ get (jobListQuery apiKey instId)
+  waitingJobs <- runExceptT $ jobList apiKey instId
   case waitingJobs of
     Left e -> putStrLn $ "Error during wait:" ++ show e
-    Right [] -> return ()
+    Right [] -> putStrLn ""
     Right jobs -> unless (all waitingJobSuccess jobs) $ do
-        putStrLn "Waiting for job to finish..."
+        putStr "."
         threadDelay (100*1000)
         waitUntilCompletion apiKey instId
 
