@@ -268,10 +268,10 @@ Wait until all operations on one instance are finished.
 waitUntilCompletion :: String -> InstanceId -> IO()
 waitUntilCompletion apiKey instId = do
   waitingJobs <- runExceptT $ jobList apiKey instId
-  case waitingJobs of
+  case all waitingJobSuccess <$> waitingJobs of
     Left e -> putStrLn $ "Error during wait:" ++ show e
-    Right [] -> putStrLn ""
-    Right jobs -> unless (all waitingJobSuccess jobs) $ do
+    Right True -> putStrLn ""
+    Right False -> do
         putStr "."
         threadDelay (100*1000)
         waitUntilCompletion apiKey instId
