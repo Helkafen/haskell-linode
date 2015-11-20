@@ -15,17 +15,57 @@ Usage example:
 >
 > main :: IO()
 > main = do
->   apiKey <- fmap (filter (/= '\n')) (readFile "apiKey")
+>   apiKey <- fmap (head . words) (readFile "apiKey")
+>   idrsa <- readFile "idrsa"
 >   let log = True
 >   let options = defaultLinodeCreationOptions {
 >     datacenterSelect = find ((=="atlanta") . datacenterName),
 >     planSelect = find ((=="Linode 2048") . planName),
+>     sshKey = Just idrsa
 >   }
->   c <- createLinode apiKey log options
->   print c
+>   l <- createLinode apiKey log options
+>   print l
+>   traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l) -- Setup the instance when the ssh connexion is ready
+>
+> setup address = P.callCommand $ "scp yourfile root@" <> ip address <> ":/root"
 -}
 
-module Network.Linode where
+module Network.Linode
+(
+  -- * Most common operations
+    createLinode
+  , createCluster
+  , defaultLinodeCreationOptions
+  , waitForSSH
+  , deleteInstance
+  , deleteCluster
+
+  -- * Lower level API calls
+  , getAccountInfo
+  , getDatacenters
+  , getDistributions
+  , getInstances
+  , getKernels
+  , getPlans
+  , getIpList
+  , createConfig
+  , createDiskFromDistribution
+  , createDisklessLinode
+  , createSwapDisk
+  , createDisk
+  , boot
+  , jobList
+
+  -- * Helpers
+  , waitUntilCompletion
+  , select
+  , publicAddress
+
+  -- * Examples
+  , exampleCreateOneLinode
+  , exampleCreateTwoLinodes
+  , testOptions
+) where
 
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async
@@ -33,29 +73,18 @@ import           Control.Error
 import           Control.Lens
 import           Control.Monad            (unless, void, when)
 import           Control.Monad.IO.Class   (liftIO)
+import qualified Control.Retry            as R
 import           Data.Aeson               (decode)
+import           Data.Foldable            (traverse_)
 import           Data.List                (find)
 import           Data.Monoid              ((<>))
 import qualified Data.Text                as T
 import qualified Network.Wreq             as W
+import qualified System.Process           as P
 
 import           Network.Linode.Internal
 import           Network.Linode.Types
 
-test :: IO ()
-test = do
-  apiKey <- fmap (filter (/= '\n')) (readFile "apiKey")
-  idrsa <- fmap (filter (/= '\n')) (readFile "idrsa")
-  let log = True
-  let options = defaultLinodeCreationOptions {
-    datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 1024") . planName),
-    sshKey = Just idrsa
-  }
-  c <- createLinode apiKey log options
-  case c of
-    Left e -> print e
-    Right l -> print l
 
 
 {-|
@@ -73,7 +102,7 @@ createLinode apiKey log options = do
         Right l -> return $ Right l
   where create :: ExceptT LinodeError IO (InstanceId, (Datacenter, Distribution, Plan, Kernel)) = do
           (datacenter, distribution, plan, kernel) <- select apiKey options
-          printLog "Creating empty linode"
+          printLog $ "Creating empty linode (" <> T.unpack (planName plan) <> " at " <> T.unpack (datacenterName datacenter) <> ")"
           CreatedInstance instId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
           return (instId, (datacenter, distribution, plan, kernel))
         configure instId options (datacenter, distribution, plan, kernel) = do
@@ -102,8 +131,8 @@ createCluster apiKey options number log = do
   (errors, linodes) <- partitionEithers <$> mapConcurrently (createLinode apiKey log) optionsList
   case (errors, linodes) of
     ([], xs) -> return $ Just xs
-    (es, xs) -> do
-      mapM_ print es
+    (errors, xs) -> do
+      mapM_ print errors
       deleteCluster apiKey (map linodeId xs)
       return Nothing
 
@@ -123,6 +152,16 @@ defaultLinodeCreationOptions = LinodeCreationOptions {
   diskLabel = "haskellMachine",
   config = Nothing
 }
+
+-- TODO: only works in linux and macos
+{-|
+Wait until an ssh connexion is possible, and add the Linode instance in ssh's known_hosts list.
+-}
+waitForSSH :: Address -> IO ()
+waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
+  where retryPolicy = R.constantDelay oneSecond <> R.limitRetries 15
+        oneSecond = 1000 * 1000
+
 
 {-|
 Delete a Linode instance.
@@ -286,3 +325,52 @@ select apiKey options = (,,,) <$>
   fetchAndSelect (runExceptT $ getDistributions apiKey) (distributionSelect options) "distribution" <*>
   fetchAndSelect (runExceptT $ getPlans apiKey) (planSelect options) "plan" <*>
   fetchAndSelect (runExceptT $ getKernels apiKey) (kernelSelect options) "kernel"
+
+
+{-|
+Pick one public address of the Linode Instance
+-}
+publicAddress :: Linode -> Maybe Address
+publicAddress = headMay . linodeAddresses
+
+{-|
+Example of Linode creation.
+-}
+exampleCreateOneLinode :: IO ()
+exampleCreateOneLinode = do
+  (apiKey, options) <- testOptions
+  c <- createLinode apiKey True options
+  case c of
+    Left e -> print e
+    Right l -> do
+      print l
+      traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l)
+  where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
+
+{-|
+Example of Linodes creation.
+-}
+exampleCreateTwoLinodes :: IO ()
+exampleCreateTwoLinodes = do
+  (apiKey, options) <- testOptions
+  c <- createCluster apiKey options 2 True
+  case c of
+    Nothing -> print "error in cluster creation"
+    Just xs -> do
+      print xs
+      mapM_ (traverse_ (\a -> waitForSSH a >> setup a) . publicAddress) xs
+  where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
+
+{-|
+A set of options for the examples. It expects the apiKey and idrsa files in the current directory.
+-}
+testOptions :: IO (String, LinodeCreationOptions)
+testOptions = do
+  apiKey <- fmap (head . words) (readFile "apiKey")
+  idrsa <- readFile "idrsa"
+  let log = True
+  return (apiKey, defaultLinodeCreationOptions {
+    datacenterSelect = find ((=="atlanta") . datacenterName),
+    planSelect = find ((=="Linode 1024") . planName),
+    sshKey = Just idrsa
+  })

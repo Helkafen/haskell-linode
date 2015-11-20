@@ -26,6 +26,8 @@ library
                       ,containers
                       ,errors
                       ,lens
+                      ,process
+                      ,retry
                       ,safe
                       ,text
                       ,transformers
