@@ -23,7 +23,7 @@ data LinodeCreationOptions = LinodeCreationOptions {
 }
 
 
-newtype ConfigId = ConfigId Int
+newtype ConfigId = ConfigId {unConfigId :: Int}
   deriving (Eq, Show, Generic)
 
 newtype DatacenterId = DatacenterId Int
@@ -35,7 +35,7 @@ newtype DistributionId = DistributionId Int
 newtype DiskId = DiskId Int
   deriving (Eq, Show)
 
-newtype InstanceId = InstanceId Int
+newtype InstanceId = InstanceId {unInstanceId :: Int}
   deriving (Eq, Ord, Show, Generic)
 
 newtype JobId = JobId Int

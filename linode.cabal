@@ -1,7 +1,10 @@
 name:                linode
 version:             0.1.0.0
 synopsis:            Bindings to the Linode API
-description:         Please see README.md
+description:         Haskell bindings to the Linode API. Rent servers hourly or monthly.
+                     .
+                     This package contains some helpers to create and configure Linode instances. The API key can be created on the Linode website.
+                     .
 homepage:            http://github.com/Helkafen/haskell-linode#readme
 license:             BSD3
 license-file:        LICENSE
@@ -11,6 +14,7 @@ copyright:           BSD3
 category:            Network, Cloud, Distributed Computing
 build-type:          Simple
 cabal-version:       >=1.10
+Tested-with:         GHC == 7.10.2
 
 library
   hs-source-dirs:      src

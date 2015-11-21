@@ -28,6 +28,24 @@ Usage example:
 >   traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l) -- Setup the instance when the ssh connexion is ready
 >
 > setup address = P.callCommand $ "scp yourfile root@" <> ip address <> ":/root"
+
+You should see something like this:
+
+Creating empty linode (Linode 2048 at atlanta)
+Creating disk (49024 MB)
+...................................
+Creating swap (128 MB)
+...............................
+Creating config
+.......
+Booting
+....................................
+Booted linode 1481198
+
+And get something like that:
+
+Linode {linodeId = InstanceId {unInstanceId = 1481198}, linodeConfigId = ConfigId {unConfigId = 2251152}, linodeDatacenterName = "atlanta", linodePassword = "We4kP4ssw0rd", linodeAddresses = [Address {ip = "45.79.194.121", rdnsName = "li1293-121.members.linode.com"}]}
+
 -}
 
 module Network.Linode
@@ -114,10 +132,12 @@ createLinode apiKey log options = do
           printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
           (CreatedDisk swapId swapJobId) <- wait >> createSwapDisk apiKey instId "swap" swapSize
           printLog "Creating config"
-          (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profileLabel" [diskId, swapId])
+          (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profile" [diskId, swapId])
+          printLog "Booting"
           (BootedInstance bootJobId) <- wait >> boot apiKey instId configId
+          printLog "Still booting"
           addresses <- wait >> getIpList apiKey instId
-          printLog $ "Booted linode " ++ show instId ++ "with config " ++ show configId
+          printLog $ "Booted linode " ++ show (unInstanceId instId)
           return $ Linode instId configId (datacenterName datacenter) (password options) addresses
         printLog l = when log (liftIO $ putStrLn l)
 
@@ -149,7 +169,7 @@ defaultLinodeCreationOptions = LinodeCreationOptions {
   swapAmount = 128,
   password = "We4kP4ssw0rd",
   sshKey = Nothing,
-  diskLabel = "haskellMachine",
+  diskLabel = "mainDisk",
   config = Nothing
 }
 
@@ -159,7 +179,7 @@ Wait until an ssh connexion is possible, and add the Linode instance in ssh's kn
 -}
 waitForSSH :: Address -> IO ()
 waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
-  where retryPolicy = R.constantDelay oneSecond <> R.limitRetries 15
+  where retryPolicy = R.constantDelay oneSecond <> R.limitRetries 100
         oneSecond = 1000 * 1000
 
 
@@ -336,29 +356,35 @@ publicAddress = headMay . linodeAddresses
 {-|
 Example of Linode creation.
 -}
-exampleCreateOneLinode :: IO ()
+exampleCreateOneLinode :: IO (Maybe Linode)
 exampleCreateOneLinode = do
   (apiKey, options) <- testOptions
   c <- createLinode apiKey True options
   case c of
-    Left e -> print e
+    Left e -> do
+      print e
+      return Nothing
     Right l -> do
       print l
       traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l)
+      return (Just l)
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
 Example of Linodes creation.
 -}
-exampleCreateTwoLinodes :: IO ()
+exampleCreateTwoLinodes :: IO (Maybe [Linode])
 exampleCreateTwoLinodes = do
   (apiKey, options) <- testOptions
   c <- createCluster apiKey options 2 True
   case c of
-    Nothing -> print "error in cluster creation"
+    Nothing -> do
+      print "error in cluster creation"
+      return Nothing
     Just xs -> do
       print xs
       mapM_ (traverse_ (\a -> waitForSSH a >> setup a) . publicAddress) xs
+      return (Just xs)
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
