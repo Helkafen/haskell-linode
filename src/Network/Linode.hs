@@ -87,7 +87,7 @@ module Network.Linode
 
 import           Control.Concurrent       (threadDelay)
 import qualified Control.Concurrent.Async as A
-import           Control.Error
+import           Control.Error hiding (err)
 import           Control.Lens
 import           Control.Monad            (when)
 import           Control.Monad.IO.Class   (liftIO)
@@ -145,16 +145,15 @@ createLinode apiKey log options = do
 {-|
 Create a Linode cluster with everything set up.
 -}
-createCluster :: String -> LinodeCreationOptions -> Int -> Bool -> IO (Maybe [Linode])
+createCluster :: String -> LinodeCreationOptions -> Int -> Bool -> IO (Either [LinodeError] [Linode])
 createCluster apiKey options number log = do
   let optionsList = take number $ map (\(o,i) -> o {diskLabel = diskLabel o <> "-" <> show i}) (zip (repeat options) ([0..] :: [Int]))
   r <- partitionEithers <$> A.mapConcurrently (createLinode apiKey log) optionsList
   case r of
-    ([], linodes) -> return $ Just linodes
+    ([], linodes) -> return (Right linodes)
     (errors, linodes) -> do
-      mapM_ print errors
       _ <- deleteCluster apiKey (map linodeId linodes)
-      return Nothing
+      return (Left errors)
 
 {-|
 Default options to create an instance. Please customize the security options.
@@ -360,13 +359,12 @@ exampleCreateOneLinode = do
   (apiKey, options) <- testOptions
   c <- createLinode apiKey True options
   case c of
-    Left e -> do
-      print e
+    Left err -> do
+      print err
       return Nothing
-    Right l -> do
-      print l
-      traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l)
-      return (Just l)
+    Right linode -> do
+      traverse_ (\a -> waitForSSH a >> setup a) (publicAddress linode)
+      return (Just linode)
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
@@ -377,13 +375,12 @@ exampleCreateTwoLinodes = do
   (apiKey, options) <- testOptions
   c <- createCluster apiKey options 2 True
   case c of
-    Nothing -> do
-      print ("error in cluster creation" :: String)
+    Left errors -> do
+      print ("error(s) in cluster creation" ++ show errors)
       return Nothing
-    Just xs -> do
-      print xs
-      mapM_ (traverse_ (\a -> waitForSSH a >> setup a) . publicAddress) xs
-      return (Just xs)
+    Right linodes -> do
+      mapM_ (traverse_ (\a -> waitForSSH a >> setup a) . publicAddress) linodes
+      return (Just linodes)
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
