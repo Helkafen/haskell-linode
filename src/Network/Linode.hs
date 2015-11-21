@@ -12,6 +12,7 @@ Usage example:
 
 > import Network.Linode
 > import Data.List (find)
+> import qualified System.Process as P
 >
 > main :: IO()
 > main = do
