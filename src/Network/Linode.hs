@@ -87,7 +87,7 @@ module Network.Linode
 
 import           Control.Concurrent       (threadDelay)
 import qualified Control.Concurrent.Async as A
-import           Control.Error hiding (err)
+import           Control.Error            hiding (err)
 import           Control.Lens
 import           Control.Monad            (when)
 import           Control.Monad.IO.Class   (liftIO)
@@ -188,6 +188,7 @@ Delete a Linode instance.
 deleteInstance :: String -> InstanceId -> ExceptT LinodeError IO DeletedInstance
 deleteInstance apiKey (InstanceId i) = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+                        & W.param "skipChecks" .~ ["true"]
   getWith opts (query "linode.delete" apiKey)
 
 {-|
