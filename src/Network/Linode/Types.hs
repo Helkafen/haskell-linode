@@ -15,6 +15,8 @@ import           Data.Text
 import           GHC.Generics        (Generic)
 import           Safe                (readMay)
 
+type ApiKey = String
+
 data LinodeCreationOptions = LinodeCreationOptions {
   datacenterSelect   :: [Datacenter] -> Maybe Datacenter,
   planSelect         :: [Plan] -> Maybe Plan,
@@ -41,7 +43,7 @@ newtype DistributionId = DistributionId Int
 newtype DiskId = DiskId {unDisk :: Int}
   deriving (Eq, Show)
 
-newtype InstanceId = InstanceId {unInstanceId :: Int}
+newtype LinodeId = LinodeId {unLinodeId :: Int}
   deriving (Eq, Ord, Show, Generic)
 
 newtype JobId = JobId Int
@@ -117,8 +119,11 @@ TODO missing fields
 "ISKVM":1
 -}
 
+{-|
+Detailed info about a Linode instance. Memory and transfer are given in MB.
+-}
 data Instance = Instance {
-  instanceId            :: InstanceId, -- "LINODEID":8098,
+  instanceId            :: LinodeId, -- "LINODEID":8098,
   instanceName          :: Text, -- LABEL
   instanceDatacenterId  :: DatacenterId, -- "DATACENTERID"
   instancePlanId        :: PlanId, -- "PLANID":1,
@@ -158,8 +163,8 @@ data CreatedConfig = CreatedConfig {
   createdConfigId :: ConfigId
 } deriving (Eq, Show)
 
-data CreatedInstance = CreatedInstance {
-  createdInstanceId :: InstanceId
+data CreatedLinode = CreatedLinode {
+  createdLinodeId :: LinodeId
 } deriving (Eq, Show)
 
 data CreatedDisk = CreatedDisk {
@@ -167,17 +172,19 @@ data CreatedDisk = CreatedDisk {
   diskCreationJobId  :: JobId
 } deriving (Eq, Show)
 
-type DeletedInstance = CreatedInstance
+type DeletedLinode = CreatedLinode
 
 data WaitingJob = WaitingJob {
-  waitingJobId         :: JobId,
-  waitingJobInstanceId :: InstanceId,
-  waitingJobSuccess    :: Bool
+  waitingJobId       :: JobId,
+  waitingJobLinodeId :: LinodeId,
+  waitingJobSuccess  :: Bool
 } deriving (Eq, Show)
 
-
+{-|
+Basic info about a linode instance.
+-}
 data Linode = Linode {
-  linodeId             :: InstanceId,
+  linodeId             :: LinodeId,
   linodeConfigId       :: ConfigId,
   linodeDatacenterName :: Text,
   linodePassword       :: String,
@@ -186,7 +193,7 @@ data Linode = Linode {
 
 instance Binary ConfigId
 
-instance Binary InstanceId
+instance Binary LinodeId
 
 instance Binary Address
 
@@ -237,8 +244,8 @@ instance FromJSON BootedInstance where
   parseJSON (Object v) = BootedInstance <$> (JobId <$> v .: "JobID")
   parseJSON _ = mzero
 
-instance FromJSON CreatedInstance where
-  parseJSON (Object v) = CreatedInstance <$> (InstanceId <$> v .: "LinodeID")
+instance FromJSON CreatedLinode where
+  parseJSON (Object v) = CreatedLinode <$> (LinodeId <$> v .: "LinodeID")
   parseJSON _ = mzero
 
 instance FromJSON CreatedConfig where
@@ -269,7 +276,7 @@ instance FromJSON Instance where
     guard (isJust status)
     backup <- o .: "BACKUPSENABLED"
     guard (Prelude.all (`elem` [0,1]) [backup])
-    Instance <$> fmap InstanceId (o .: "LINODEID")
+    Instance <$> fmap LinodeId (o .: "LINODEID")
              <*>  o .: "LABEL"
              <*> fmap DatacenterId (o .: "DATACENTERID")
              <*> fmap PlanId (o .: "PLANID")
@@ -311,7 +318,7 @@ instance FromJSON Plan where
 instance FromJSON WaitingJob where
   parseJSON = withObject "person" $ \o -> do
     j <- JobId <$> o .: "JOBID"
-    i <- InstanceId <$> o .: "LINODEID"
+    i <- LinodeId <$> o .: "LINODEID"
     success :: Maybe Int  <- optional (o .: "HOST_SUCCESS") -- 1 if ok, "" if not
     return $ WaitingJob j i (fromMaybe 0 success == 1)
 

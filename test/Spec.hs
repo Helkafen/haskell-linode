@@ -54,11 +54,11 @@ testAccountInfo = assertEqual "Parsing some account info" (Right $ AccountInfo 2
   where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":{\"TRANSFER_USED\":1,\"BALANCE\":0.0000,\"TRANSFER_BILLABLE\":0,\"BILLING_METHOD\":\"prepay\",\"TRANSFER_POOL\":2000,\"ACTIVE_SINCE\":\"2011-03-10 19:18:43.0\",\"MANAGED\":false},\"ACTION\":\"account.info\"}" :: Either LinodeError AccountInfo
 
 testInstanceList :: Assertion
-testInstanceList = assertEqual "Parsing some account info" (Right [Instance {instanceId = InstanceId 8098, instanceName = "api-node3", instanceDatacenterId = DatacenterId 5, instancePlanId = PlanId 1, instanceRAM = 1024, instanceHD = 40960, instanceTransfer = 2000, instanceBackupEnabled = True, instanceStatus = PoweredOff}]) x
+testInstanceList = assertEqual "Parsing some account info" (Right [Instance {instanceId = LinodeId 8098, instanceName = "api-node3", instanceDatacenterId = DatacenterId 5, instancePlanId = PlanId 1, instanceRAM = 1024, instanceHD = 40960, instanceTransfer = 2000, instanceBackupEnabled = True, instanceStatus = PoweredOff}]) x
   where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":[{\"LINODEID\":8098, \"LABEL\": \"api-node3\", \"DATACENTERID\": 5, \"PLANID\":1, \"TOTALRAM\":1024, \"TOTALHD\":40960, \"TOTALXFER\":2000, \"BACKUPSENABLED\":1, \"STATUS\":2}],\"ACTION\":\"linode.list\"}" :: Either LinodeError [Instance]
 
 testInstanceCreation :: Assertion
-testInstanceCreation = assertEqual "Parsing the instanceId after a call to linode.create" (Right $ CreatedInstance (InstanceId 1449138)) x
+testInstanceCreation = assertEqual "Parsing the instanceId after a call to linode.create" (Right $ CreatedLinode (LinodeId 1449138)) x
   where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":{\"LinodeID\":1449138},\"ACTION\":\"linode.create\"}"
 
 testDiskCreation :: Assertion
@@ -66,7 +66,7 @@ testDiskCreation = assertEqual "Parsing the diskId and jobId after creating a di
   where x = parseResponse "{\"ERRORARRAY\":[],\"ACTION\":\"linode.disk.createFromDistribution\",\"DATA\":{\"JobID\":1298,\"DiskID\":55647}}"
 
 testJobWait :: Assertion
-testJobWait = assertEqual "Parsing a waiting job list" (Right [WaitingJob (JobId 29046473) (InstanceId 1450724) True, WaitingJob (JobId 29046472) (InstanceId 1450724) False]) x
+testJobWait = assertEqual "Parsing a waiting job list" (Right [WaitingJob (JobId 29046473) (LinodeId 1450724) True, WaitingJob (JobId 29046472) (LinodeId 1450724) False]) x
   where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":[{\"HOST_START_DT\":\"\",\"HOST_MESSAGE\":\"\",\"ENTERED_DT\":\"2015-11-08 10:38:15.0\",\"HOST_FINISH_DT\":\"\",\"LABEL\":\"Disk Create From Distribution - Debian 8.1\",\"JOBID\":29046473,\"HOST_SUCCESS\":1,\"ACTION\":\"fs.create.from.distro\",\"LINODEID\":1450724,\"DURATION\":\"\"},{\"HOST_START_DT\":\"\",\"HOST_MESSAGE\":\"\",\"ENTERED_DT\":\"2015-11-08 10:38:14.0\",\"HOST_FINISH_DT\":\"\",\"LABEL\":\"Linode Initial Configuration\",\"JOBID\":29046472,\"HOST_SUCCESS\":\"\",\"ACTION\":\"linode.create\",\"LINODEID\":1450724,\"DURATION\":\"\"}],\"ACTION\":\"linode.job.list\"}"
 
 tests :: TestTree

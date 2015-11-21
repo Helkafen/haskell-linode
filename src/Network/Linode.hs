@@ -6,9 +6,9 @@ Module      : Network.Linode
 License     : BSD3
 Stability   : experimental
 
-This package contains some helpers to create and configure Linode instances. They all require an API key, which can be created on the Linode website.
+This package contains some helpers to create and configure <https://www.linode.com/ Linode> instances. They all require an API key, which can be created on the Linode website.
 
-Usage example:
+Usage example. We want to create one Linode instance in Atlanta with 2GB of RAM:
 
 > import Network.Linode
 > import Data.List (find)
@@ -17,35 +17,40 @@ Usage example:
 > main :: IO()
 > main = do
 >   apiKey <- fmap (head . words) (readFile "apiKey")
->   idrsa <- readFile "idrsa"
+>   sshPublicKey <- readFile "id_rsa.pub"
 >   let log = True
 >   let options = defaultLinodeCreationOptions {
 >     datacenterSelect = find ((=="atlanta") . datacenterName),
 >     planSelect = find ((=="Linode 2048") . planName),
->     sshKey = Just idrsa
+>     sshKey = Just sshPublicKey
 >   }
->   l <- createLinode apiKey log options
->   print l
->   traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l) -- Setup the instance when the ssh connexion is ready
+>   linode <- createLinode apiKey log options
+>   print linode
+>   traverse_ (\a -> waitForSSH a >> setup a) (publicAddress linode) -- Setup the instance when the ssh connexion is ready
 >
 > setup address = P.callCommand $ "scp yourfile root@" <> ip address <> ":/root"
 
 You should see something like this:
 
-Creating empty linode (Linode 2048 at atlanta)
-Creating disk (49024 MB)
-...................................
-Creating swap (128 MB)
-...............................
-Creating config
-.......
-Booting
-....................................
-Booted linode 1481198
+> Creating empty linode (Linode 2048 at atlanta)
+> Creating disk (49024 MB)
+> ...................................
+> Creating swap (128 MB)
+> ...............................
+> Creating config
+> .......
+> Booting
+> ....................................
+> Booted linode 1481198
 
 And get something like that:
 
-Linode {linodeId = InstanceId {unInstanceId = 1481198}, linodeConfigId = ConfigId {unConfigId = 2251152}, linodeDatacenterName = "atlanta", linodePassword = "We4kP4ssw0rd", linodeAddresses = [Address {ip = "45.79.194.121", rdnsName = "li1293-121.members.linode.com"}]}
+> Linode {
+>   linodeId = LinodeId {unLinodeId = 1481198},
+>   linodeConfigId = ConfigId {unConfigId = 2251152},
+>   linodeDatacenterName = "atlanta",
+>   linodePassword = "We4kP4ssw0rd",
+>   linodeAddresses = [Address {ip = "45.79.194.121", rdnsName = "li1293-121.members.linode.com"}]}
 
 -}
 
@@ -107,46 +112,46 @@ import           Network.Linode.Types
 
 
 {-|
-Create a Linode with everything set up, and boot it.
+Create a Linode instance and boot it.
 -}
-createLinode :: String -> Bool -> LinodeCreationOptions -> IO (Either LinodeError Linode)
+createLinode :: ApiKey -> Bool -> LinodeCreationOptions -> IO (Either LinodeError Linode)
 createLinode apiKey log options = do
   i <- runExceptT create
   case i of
     Left e -> return $ Left e
-    Right (instId, selected) -> do
-      r <- runExceptT $ configure instId selected
+    Right (linId, selected) -> do
+      r <- runExceptT $ configure linId selected
       case r of
-        Left e -> runExceptT (deleteInstance apiKey instId) >> return (Left e)
+        Left e ->  deleteInstance apiKey linId >> return (Left e)
         Right l -> return $ Right l
-  where create :: ExceptT LinodeError IO (InstanceId, (Datacenter, Distribution, Plan, Kernel)) = do
+  where create :: ExceptT LinodeError IO (LinodeId, (Datacenter, Distribution, Plan, Kernel)) = do
           (datacenter, distribution, plan, kernel) <- select apiKey options
           printLog $ "Creating empty linode (" <> T.unpack (planName plan) <> " at " <> T.unpack (datacenterName datacenter) <> ")"
-          CreatedInstance instId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
-          return (instId, (datacenter, distribution, plan, kernel))
-        configure instId (datacenter, distribution, plan, kernel) = do
+          CreatedLinode linId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
+          return (linId, (datacenter, distribution, plan, kernel))
+        configure linId (datacenter, distribution, plan, kernel) = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
-          let wait = liftIO (waitUntilCompletion apiKey instId)
+          let wait = liftIO (waitUntilCompletion apiKey linId)
           printLog $ "Creating disk (" ++ show rootDiskSize ++ " MB)"
-          (CreatedDisk diskId _) <- wait >> createDiskFromDistribution apiKey instId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
+          (CreatedDisk diskId _) <- wait >> createDiskFromDistribution apiKey linId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
           printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
-          (CreatedDisk swapId _) <- wait >> createSwapDisk apiKey instId "swap" swapSize
+          (CreatedDisk swapId _) <- wait >> createSwapDisk apiKey linId "swap" swapSize
           printLog "Creating config"
-          (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profile" [diskId, swapId])
+          (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey linId (kernelId kernel) "profile" [diskId, swapId])
           printLog "Booting"
-          (BootedInstance _) <- wait >> boot apiKey instId configId
+          (BootedInstance _) <- wait >> boot apiKey linId configId
           printLog "Still booting"
-          addresses <- wait >> getIpList apiKey instId
-          printLog $ "Booted linode " ++ show (unInstanceId instId)
-          return $ Linode instId configId (datacenterName datacenter) (password options) addresses
+          addresses <- wait >> getIpList apiKey linId
+          printLog $ "Booted linode " ++ show (unLinodeId linId)
+          return $ Linode linId configId (datacenterName datacenter) (password options) addresses
         printLog l = when log (liftIO $ putStrLn l)
 
 
 {-|
-Create a Linode cluster with everything set up.
+Create a Linode cluster.
 -}
-createCluster :: String -> LinodeCreationOptions -> Int -> Bool -> IO (Either [LinodeError] [Linode])
+createCluster :: ApiKey -> LinodeCreationOptions -> Int -> Bool -> IO (Either [LinodeError] [Linode])
 createCluster apiKey options number log = do
   let optionsList = take number $ map (\(o,i) -> o {diskLabel = diskLabel o <> "-" <> show i}) (zip (repeat options) ([0..] :: [Int]))
   r <- partitionEithers <$> A.mapConcurrently (createLinode apiKey log) optionsList
@@ -175,7 +180,9 @@ defaultLinodeCreationOptions = LinodeCreationOptions {
 
 -- TODO: only works in linux and macos
 {-|
-Wait until an ssh connexion is possible, and add the Linode instance in ssh's known_hosts list.
+Wait until an ssh connexion is possible, then add the Linode's ip in known_hosts.
+
+A newly created Linode is unreachable during a few seconds.
 -}
 waitForSSH :: Address -> IO ()
 waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
@@ -186,69 +193,69 @@ waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o Stric
 {-|
 Delete a Linode instance.
 -}
-deleteInstance :: String -> InstanceId -> ExceptT LinodeError IO DeletedInstance
-deleteInstance apiKey (InstanceId i) = do
+deleteInstance :: ApiKey -> LinodeId -> IO (Either LinodeError DeletedLinode)
+deleteInstance apiKey (LinodeId i) = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "skipChecks" .~ ["true"]
-  getWith opts (query "linode.delete" apiKey)
+  runExceptT $ getWith opts (query "linode.delete" apiKey)
 
 {-|
 Delete a list of Linode instances.
 -}
-deleteCluster :: String -> [InstanceId] -> IO (Either LinodeError ())
-deleteCluster apiKey = runExceptT . mapM_ (deleteInstance apiKey)
+deleteCluster :: ApiKey -> [LinodeId] -> IO ([LinodeError],[DeletedLinode])
+deleteCluster apiKey linodes = partitionEithers <$> mapM (deleteInstance apiKey) linodes
 
 
 {-|
 Read your global account information: network usage, billing state and billing method.
 -}
-getAccountInfo :: String -> ExceptT LinodeError IO AccountInfo
+getAccountInfo :: ApiKey -> ExceptT LinodeError IO AccountInfo
 getAccountInfo = noParamQuery "account.info"
 
 {-|
 Read all Linode datacenters: dallas, fremont, atlanta, newark, london, tokyo, singapore, frankfurt
 -}
-getDatacenters :: String -> ExceptT LinodeError IO [Datacenter]
+getDatacenters :: ApiKey -> ExceptT LinodeError IO [Datacenter]
 getDatacenters = noParamQuery "avail.datacenters"
 
 {-|
 Read all available Linux distributions. For example, Debian 8.1 has id 140.
 -}
-getDistributions :: String -> ExceptT LinodeError IO [Distribution]
+getDistributions :: ApiKey -> ExceptT LinodeError IO [Distribution]
 getDistributions = noParamQuery "avail.distributions"
 
 {-|
-Read all your instances.
+Read detailed information about all your instances.
 -}
-getInstances :: String -> ExceptT LinodeError IO [Instance]
+getInstances :: ApiKey -> ExceptT LinodeError IO [Instance]
 getInstances = noParamQuery "linode.list"
 
 {-|
 Read all available Linux kernels.
 -}
-getKernels :: String -> ExceptT LinodeError IO [Kernel]
+getKernels :: ApiKey -> ExceptT LinodeError IO [Kernel]
 getKernels = noParamQuery "avail.kernels"
 
 {-|
 Read all plans offered by Linode. A plan specifies the available CPU, RAM, network usage and pricing of an instance.
 The smallest plan is Linode 1024.
 -}
-getPlans :: String -> ExceptT LinodeError IO [Plan]
+getPlans :: ApiKey -> ExceptT LinodeError IO [Plan]
 getPlans = noParamQuery "avail.linodeplans"
 
 {-|
 Read all IP addresses of an instance.
 -}
-getIpList :: String -> InstanceId -> ExceptT LinodeError IO [Address]
-getIpList apiKey (InstanceId i) = do
+getIpList :: ApiKey -> LinodeId -> ExceptT LinodeError IO [Address]
+getIpList apiKey (LinodeId i) = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
   getWith opts (query "linode.ip.list" apiKey)
 
 {-|
 Create a Linode Config (a bag of instance options).
 -}
-createConfig :: String -> InstanceId -> KernelId -> String -> [DiskId] -> ExceptT LinodeError IO CreatedConfig
-createConfig apiKey (InstanceId i) (KernelId k) label disksIds = do
+createConfig :: ApiKey -> LinodeId -> KernelId -> String -> [DiskId] -> ExceptT LinodeError IO CreatedConfig
+createConfig apiKey (LinodeId i) (KernelId k) label disksIds = do
   let disksList = T.intercalate "," $ take 9 $ map (T.pack . show . unDisk) disksIds ++ repeat ""
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "KernelID" .~ [T.pack $ show k]
@@ -259,16 +266,16 @@ createConfig apiKey (InstanceId i) (KernelId k) label disksIds = do
   getWith opts (query "linode.config.create" apiKey)
 
 {-|
-Create a disk from a supported Linux distribution.
+Create a disk from a supported Linux distribution. Size in MB.
 -}
-createDiskFromDistribution :: String -> InstanceId -> DistributionId -> String -> Int -> String -> Maybe String -> ExceptT LinodeError IO CreatedDisk
-createDiskFromDistribution apiKey (InstanceId i) (DistributionId d) label size pass idrsa = do
+createDiskFromDistribution :: ApiKey -> LinodeId -> DistributionId -> String -> Int -> String -> Maybe String -> ExceptT LinodeError IO CreatedDisk
+createDiskFromDistribution apiKey (LinodeId i) (DistributionId d) label size pass sshPublicKey = do
     let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                           & W.param "DistributionID" .~ [T.pack $ show d]
                           & W.param "Label" .~ [T.pack label]
                           & W.param "Size" .~ [T.pack $ show size]
                           & W.param "rootPass" .~ [T.pack pass]
-                          & case T.pack <$> idrsa of
+                          & case T.pack <$> sshPublicKey of
                               Nothing -> id
                               Just k -> W.param "rootSSHKey" .~ [k]
     getWith opts (query "linode.disk.createfromdistribution" apiKey)
@@ -276,7 +283,7 @@ createDiskFromDistribution apiKey (InstanceId i) (DistributionId d) label size p
 {-|
 Create a Linode instance with no disk and no configuration. You probably want createLinode.
 -}
-createDisklessLinode :: String -> DatacenterId -> PlanId -> PaymentTerm -> ExceptT LinodeError IO CreatedInstance
+createDisklessLinode :: ApiKey -> DatacenterId -> PlanId -> PaymentTerm -> ExceptT LinodeError IO CreatedLinode
 createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = do
   let opts = W.defaults & W.param "DatacenterID" .~ [T.pack $ show d]
                         & W.param "PlanID" .~ [T.pack $ show p]
@@ -287,14 +294,14 @@ createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = do
 {-|
 Create a swap partition.
 -}
-createSwapDisk :: String -> InstanceId -> String -> Int -> ExceptT LinodeError IO CreatedDisk
-createSwapDisk apiKey instId label = createDisk apiKey instId label Swap
+createSwapDisk :: ApiKey -> LinodeId -> String -> Int -> ExceptT LinodeError IO CreatedDisk
+createSwapDisk apiKey linId label = createDisk apiKey linId label Swap
 
 {-|
 Create a partition.
 -}
-createDisk :: String -> InstanceId -> String -> DiskType -> Int -> ExceptT LinodeError IO CreatedDisk
-createDisk apiKey (InstanceId i) label diskType size = do
+createDisk :: ApiKey -> LinodeId -> String -> DiskType -> Int -> ExceptT LinodeError IO CreatedDisk
+createDisk apiKey (LinodeId i) label diskType size = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "Label" .~ [T.pack label]
                         & W.param "Type" .~ [T.pack (diskTypeToString diskType)]
@@ -303,10 +310,10 @@ createDisk apiKey (InstanceId i) label diskType size = do
 
 
 {-|
-Boot an Linode instance.
+Boot a Linode instance.
 -}
-boot :: String-> InstanceId -> ConfigId -> ExceptT LinodeError IO BootedInstance
-boot apiKey (InstanceId i) (ConfigId c) = do
+boot :: ApiKey-> LinodeId -> ConfigId -> ExceptT LinodeError IO BootedInstance
+boot apiKey (LinodeId i) (ConfigId c) = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "ConfigID" .~ [T.pack $ show c]
   getWith opts (query "linode.boot" apiKey)
@@ -315,31 +322,31 @@ boot apiKey (InstanceId i) (ConfigId c) = do
 {-|
 List of pending jobs for this Linode instance.
 -}
-jobList :: String -> InstanceId -> ExceptT LinodeError IO [WaitingJob]
-jobList apiKey (InstanceId i) = do
+jobList :: ApiKey -> LinodeId -> ExceptT LinodeError IO [WaitingJob]
+jobList apiKey (LinodeId i) = do
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "pendingOnly" .~ ["true"]
   getWith opts (query "linode.job.list" apiKey)
 
 {-|
-Wait until all operations on one instance are finished.
+Wait until all operations on one instance are done.
 -}
-waitUntilCompletion :: String -> InstanceId -> IO()
-waitUntilCompletion apiKey instId = do
-  waitingJobs <- runExceptT $ jobList apiKey instId
+waitUntilCompletion :: ApiKey -> LinodeId -> IO()
+waitUntilCompletion apiKey linId = do
+  waitingJobs <- runExceptT $ jobList apiKey linId
   case all waitingJobSuccess <$> waitingJobs of
     Left e -> putStrLn $ "Error during wait:" ++ show e
     Right True -> putStrLn ""
     Right False -> do
         putStr "."
         threadDelay (100*1000)
-        waitUntilCompletion apiKey instId
+        waitUntilCompletion apiKey linId
 
 
 {-|
 Select a Datacenter, a Plan, a Linux distribution and kernel from all Linode offering.
 -}
-select :: String -> LinodeCreationOptions -> ExceptT LinodeError IO (Datacenter, Distribution, Plan, Kernel)
+select :: ApiKey -> LinodeCreationOptions -> ExceptT LinodeError IO (Datacenter, Distribution, Plan, Kernel)
 select apiKey options = (,,,) <$>
   fetchAndSelect (runExceptT $ getDatacenters apiKey) (datacenterSelect options) "datacenter" <*>
   fetchAndSelect (runExceptT $ getDistributions apiKey) (distributionSelect options) "distribution" <*>
@@ -386,14 +393,14 @@ exampleCreateTwoLinodes = do
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
-A set of options for the examples. It expects the apiKey and idrsa files in the current directory.
+A set of options for the examples. It expects the apiKey and id_rsa.pub files in the current directory.
 -}
-testOptions :: IO (String, LinodeCreationOptions)
+testOptions :: IO (ApiKey, LinodeCreationOptions)
 testOptions = do
   apiKey <- fmap (head . words) (readFile "apiKey")
-  idrsa <- readFile "idrsa"
+  sshPublicKey <- readFile "id_rsa.pub"
   return (apiKey, defaultLinodeCreationOptions {
     datacenterSelect = find ((=="atlanta") . datacenterName),
     planSelect = find ((=="Linode 1024") . planName),
-    sshKey = Just idrsa
+    sshKey = Just sshPublicKey
   })
