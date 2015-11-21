@@ -86,18 +86,18 @@ module Network.Linode
 ) where
 
 import           Control.Concurrent       (threadDelay)
-import           Control.Concurrent.Async
+import qualified Control.Concurrent.Async as A
 import           Control.Error
 import           Control.Lens
-import           Control.Monad            (unless, void, when)
+import           Control.Monad            (when)
 import           Control.Monad.IO.Class   (liftIO)
 import qualified Control.Retry            as R
-import           Data.Aeson               (decode)
 import           Data.Foldable            (traverse_)
 import           Data.List                (find)
 import           Data.Monoid              ((<>))
 import qualified Data.Text                as T
 import qualified Network.Wreq             as W
+import           Prelude                  hiding (log)
 import qualified System.Process           as P
 
 import           Network.Linode.Internal
@@ -114,7 +114,7 @@ createLinode apiKey log options = do
   case i of
     Left e -> return $ Left e
     Right (instId, selected) -> do
-      r <- runExceptT $ configure instId options selected
+      r <- runExceptT $ configure instId selected
       case r of
         Left e -> runExceptT (deleteInstance apiKey instId) >> return (Left e)
         Right l -> return $ Right l
@@ -123,18 +123,18 @@ createLinode apiKey log options = do
           printLog $ "Creating empty linode (" <> T.unpack (planName plan) <> " at " <> T.unpack (datacenterName datacenter) <> ")"
           CreatedInstance instId <- createDisklessLinode apiKey (datacenterId datacenter) (planId plan) (paymentChoice options)
           return (instId, (datacenter, distribution, plan, kernel))
-        configure instId options (datacenter, distribution, plan, kernel) = do
+        configure instId (datacenter, distribution, plan, kernel) = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
           let wait = liftIO (waitUntilCompletion apiKey instId)
           printLog $ "Creating disk (" ++ show rootDiskSize ++ " MB)"
-          (CreatedDisk diskId diskJobId) <- wait >> createDiskFromDistribution apiKey instId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
+          (CreatedDisk diskId _) <- wait >> createDiskFromDistribution apiKey instId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
           printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
-          (CreatedDisk swapId swapJobId) <- wait >> createSwapDisk apiKey instId "swap" swapSize
+          (CreatedDisk swapId _) <- wait >> createSwapDisk apiKey instId "swap" swapSize
           printLog "Creating config"
           (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey instId (kernelId kernel) "profile" [diskId, swapId])
           printLog "Booting"
-          (BootedInstance bootJobId) <- wait >> boot apiKey instId configId
+          (BootedInstance _) <- wait >> boot apiKey instId configId
           printLog "Still booting"
           addresses <- wait >> getIpList apiKey instId
           printLog $ "Booted linode " ++ show (unInstanceId instId)
@@ -147,13 +147,13 @@ Create a Linode cluster with everything set up.
 -}
 createCluster :: String -> LinodeCreationOptions -> Int -> Bool -> IO (Maybe [Linode])
 createCluster apiKey options number log = do
-  let optionsList = take number $ map (\(o,i) -> o {diskLabel = diskLabel o <> "-" <> show i}) (zip (repeat options) [0..])
-  (errors, linodes) <- partitionEithers <$> mapConcurrently (createLinode apiKey log) optionsList
-  case (errors, linodes) of
-    ([], xs) -> return $ Just xs
-    (errors, xs) -> do
+  let optionsList = take number $ map (\(o,i) -> o {diskLabel = diskLabel o <> "-" <> show i}) (zip (repeat options) ([0..] :: [Int]))
+  r <- partitionEithers <$> A.mapConcurrently (createLinode apiKey log) optionsList
+  case r of
+    ([], linodes) -> return $ Just linodes
+    (errors, linodes) -> do
       mapM_ print errors
-      deleteCluster apiKey (map linodeId xs)
+      _ <- deleteCluster apiKey (map linodeId linodes)
       return Nothing
 
 {-|
@@ -248,7 +248,6 @@ Create a Linode Config (a bag of instance options).
 -}
 createConfig :: String -> InstanceId -> KernelId -> String -> [DiskId] -> ExceptT LinodeError IO CreatedConfig
 createConfig apiKey (InstanceId i) (KernelId k) label disksIds = do
-  let unDisk (DiskId i) = i
   let disksList = T.intercalate "," $ take 9 $ map (T.pack . show . unDisk) disksIds ++ repeat ""
   let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "KernelID" .~ [T.pack $ show k]
@@ -262,13 +261,13 @@ createConfig apiKey (InstanceId i) (KernelId k) label disksIds = do
 Create a disk from a supported Linux distribution.
 -}
 createDiskFromDistribution :: String -> InstanceId -> DistributionId -> String -> Int -> String -> Maybe String -> ExceptT LinodeError IO CreatedDisk
-createDiskFromDistribution apiKey (InstanceId i) (DistributionId d) label size pass sshKey = do
+createDiskFromDistribution apiKey (InstanceId i) (DistributionId d) label size pass idrsa = do
     let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
                           & W.param "DistributionID" .~ [T.pack $ show d]
                           & W.param "Label" .~ [T.pack label]
                           & W.param "Size" .~ [T.pack $ show size]
                           & W.param "rootPass" .~ [T.pack pass]
-                          & case T.pack <$> sshKey of
+                          & case T.pack <$> idrsa of
                               Nothing -> id
                               Just k -> W.param "rootSSHKey" .~ [k]
     getWith opts (query "linode.disk.createfromdistribution" apiKey)
@@ -288,7 +287,7 @@ createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = do
 Create a swap partition.
 -}
 createSwapDisk :: String -> InstanceId -> String -> Int -> ExceptT LinodeError IO CreatedDisk
-createSwapDisk apiKey instanceId label = createDisk apiKey instanceId label Swap
+createSwapDisk apiKey instId label = createDisk apiKey instId label Swap
 
 {-|
 Create a partition.
@@ -379,7 +378,7 @@ exampleCreateTwoLinodes = do
   c <- createCluster apiKey options 2 True
   case c of
     Nothing -> do
-      print "error in cluster creation"
+      print ("error in cluster creation" :: String)
       return Nothing
     Just xs -> do
       print xs
@@ -394,7 +393,6 @@ testOptions :: IO (String, LinodeCreationOptions)
 testOptions = do
   apiKey <- fmap (head . words) (readFile "apiKey")
   idrsa <- readFile "idrsa"
-  let log = True
   return (apiKey, defaultLinodeCreationOptions {
     datacenterSelect = find ((=="atlanta") . datacenterName),
     planSelect = find ((=="Linode 1024") . planName),

@@ -4,29 +4,26 @@
 module Network.Linode.Internal where
 
 import           Control.Error
-import           Control.Exception      (IOException (..), handle)
+import           Control.Exception      (IOException, handle)
 import           Control.Lens           ((^?))
-import           Control.Monad          (when)
 import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson             (FromJSON, decode)
 import qualified Data.ByteString.Lazy   as B
-import           Data.Maybe             (fromMaybe)
 import           Data.Monoid            ((<>))
 import qualified Data.Text.Encoding     as E
 import qualified Data.Text.IO           as TIO
 import qualified Network.Wreq           as W
 
-import           Network.Linode.Json
 import           Network.Linode.Types
 
 
 parseResponse :: FromJSON a => B.ByteString -> Either LinodeError a
 parseResponse body = case decode body of
-  Nothing -> Left err
+  Nothing -> Left e
   Just (Response [] (Just c)) -> Right c
   Just (Response (x:_) _) -> Left x
-  otherwise -> Left err
-  where err = DeserializationError (E.decodeUtf8 $ B.toStrict body)
+  _ -> Left e
+  where e = DeserializationError (E.decodeUtf8 $ B.toStrict body)
 
 
 diskTypeToString :: DiskType -> String
