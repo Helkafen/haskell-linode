@@ -194,10 +194,11 @@ waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o Stric
 Delete a Linode instance.
 -}
 deleteInstance :: ApiKey -> LinodeId -> IO (Either LinodeError DeletedLinode)
-deleteInstance apiKey (LinodeId i) = do
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-                        & W.param "skipChecks" .~ ["true"]
-  runExceptT $ getWith opts (query "linode.delete" apiKey)
+deleteInstance apiKey (LinodeId i) = runExceptT $ getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.delete"]
+             & W.param "LinodeID" .~ [T.pack $ show i]
+             & W.param "skipChecks" .~ ["true"]
 
 {-|
 Delete a list of Linode instances.
@@ -210,46 +211,47 @@ deleteCluster apiKey linodes = partitionEithers <$> mapM (deleteInstance apiKey)
 Read your global account information: network usage, billing state and billing method.
 -}
 getAccountInfo :: ApiKey -> ExceptT LinodeError IO AccountInfo
-getAccountInfo = noParamQuery "account.info"
+getAccountInfo = simpleGetter "account.info"
 
 {-|
 Read all Linode datacenters: dallas, fremont, atlanta, newark, london, tokyo, singapore, frankfurt
 -}
 getDatacenters :: ApiKey -> ExceptT LinodeError IO [Datacenter]
-getDatacenters = noParamQuery "avail.datacenters"
+getDatacenters = simpleGetter "avail.datacenters"
 
 {-|
 Read all available Linux distributions. For example, Debian 8.1 has id 140.
 -}
 getDistributions :: ApiKey -> ExceptT LinodeError IO [Distribution]
-getDistributions = noParamQuery "avail.distributions"
+getDistributions = simpleGetter "avail.distributions"
 
 {-|
 Read detailed information about all your instances.
 -}
 getInstances :: ApiKey -> ExceptT LinodeError IO [Instance]
-getInstances = noParamQuery "linode.list"
+getInstances = simpleGetter "linode.list"
 
 {-|
 Read all available Linux kernels.
 -}
 getKernels :: ApiKey -> ExceptT LinodeError IO [Kernel]
-getKernels = noParamQuery "avail.kernels"
+getKernels = simpleGetter "avail.kernels"
 
 {-|
 Read all plans offered by Linode. A plan specifies the available CPU, RAM, network usage and pricing of an instance.
 The smallest plan is Linode 1024.
 -}
 getPlans :: ApiKey -> ExceptT LinodeError IO [Plan]
-getPlans = noParamQuery "avail.linodeplans"
+getPlans = simpleGetter "avail.linodeplans"
 
 {-|
 Read all IP addresses of an instance.
 -}
 getIpList :: ApiKey -> LinodeId -> ExceptT LinodeError IO [Address]
-getIpList apiKey (LinodeId i) = do
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-  getWith opts (query "linode.ip.list" apiKey)
+getIpList apiKey (LinodeId i) = getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.ip.list"]
+             & W.param "LinodeID" .~ [T.pack $ show i]
 
 {-|
 Create a Linode Config (a bag of instance options).
@@ -257,39 +259,42 @@ Create a Linode Config (a bag of instance options).
 createConfig :: ApiKey -> LinodeId -> KernelId -> String -> [DiskId] -> ExceptT LinodeError IO CreatedConfig
 createConfig apiKey (LinodeId i) (KernelId k) label disksIds = do
   let disksList = T.intercalate "," $ take 9 $ map (T.pack . show . unDisk) disksIds ++ repeat ""
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
+  let opts = W.defaults & W.param "api_key" .~ [T.pack apiKey]
+                        & W.param "api_action" .~ [T.pack "linode.config.create"]
+                        & W.param "LinodeID" .~ [T.pack $ show i]
                         & W.param "KernelID" .~ [T.pack $ show k]
                         & W.param "Label" .~ [T.pack label]
                         & W.param "DiskList" .~ [disksList]
                         & W.param "helper_distro" .~ ["true"]
                         & W.param "helper_network" .~ ["true"]
-  getWith opts (query "linode.config.create" apiKey)
+  getWith opts
 
 {-|
 Create a disk from a supported Linux distribution. Size in MB.
 -}
 createDiskFromDistribution :: ApiKey -> LinodeId -> DistributionId -> String -> Int -> String -> Maybe String -> ExceptT LinodeError IO CreatedDisk
-createDiskFromDistribution apiKey (LinodeId i) (DistributionId d) label size pass sshPublicKey = do
-    let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-                          & W.param "DistributionID" .~ [T.pack $ show d]
-                          & W.param "Label" .~ [T.pack label]
-                          & W.param "Size" .~ [T.pack $ show size]
-                          & W.param "rootPass" .~ [T.pack pass]
-                          & case T.pack <$> sshPublicKey of
-                              Nothing -> id
-                              Just k -> W.param "rootSSHKey" .~ [k]
-    getWith opts (query "linode.disk.createfromdistribution" apiKey)
+createDiskFromDistribution apiKey (LinodeId i) (DistributionId d) label size pass sshPublicKey = getWith $
+    W.defaults & W.param "api_key" .~ [T.pack apiKey]
+               & W.param "api_action" .~ [T.pack "linode.disk.createfromdistribution"]
+               & W.param "LinodeID" .~ [T.pack $ show i]
+               & W.param "DistributionID" .~ [T.pack $ show d]
+               & W.param "Label" .~ [T.pack label]
+               & W.param "Size" .~ [T.pack $ show size]
+               & W.param "rootPass" .~ [T.pack pass]
+               & case T.pack <$> sshPublicKey of
+                   Nothing -> id
+                   Just k -> W.param "rootSSHKey" .~ [k]
 
 {-|
 Create a Linode instance with no disk and no configuration. You probably want createLinode.
 -}
 createDisklessLinode :: ApiKey -> DatacenterId -> PlanId -> PaymentTerm -> ExceptT LinodeError IO CreatedLinode
-createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = do
-  let opts = W.defaults & W.param "DatacenterID" .~ [T.pack $ show d]
-                        & W.param "PlanID" .~ [T.pack $ show p]
-                        & W.param "PaymentTerm" .~ [T.pack $ show (paymentTermToInt paymentTerm)]
-  getWith opts (query "linode.create" apiKey)
-
+createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.create"]
+             & W.param "DatacenterID" .~ [T.pack $ show d]
+             & W.param "PlanID" .~ [T.pack $ show p]
+             & W.param "PaymentTerm" .~ [T.pack $ show (paymentTermToInt paymentTerm)]
 
 {-|
 Create a swap partition.
@@ -301,32 +306,34 @@ createSwapDisk apiKey linId label = createDisk apiKey linId label Swap
 Create a partition.
 -}
 createDisk :: ApiKey -> LinodeId -> String -> DiskType -> Int -> ExceptT LinodeError IO CreatedDisk
-createDisk apiKey (LinodeId i) label diskType size = do
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-                        & W.param "Label" .~ [T.pack label]
-                        & W.param "Type" .~ [T.pack (diskTypeToString diskType)]
-                        & W.param "size" .~ [T.pack $ show size]
-  getWith opts (query "linode.disk.create" apiKey)
+createDisk apiKey (LinodeId i) label diskType size = getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.disk.create"]
+             & W.param "LinodeID" .~ [T.pack $ show i]
+             & W.param "Label" .~ [T.pack label]
+             & W.param "Type" .~ [T.pack (diskTypeToString diskType)]
+             & W.param "size" .~ [T.pack $ show size]
 
 
 {-|
 Boot a Linode instance.
 -}
 boot :: ApiKey-> LinodeId -> ConfigId -> ExceptT LinodeError IO BootedInstance
-boot apiKey (LinodeId i) (ConfigId c) = do
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-                        & W.param "ConfigID" .~ [T.pack $ show c]
-  getWith opts (query "linode.boot" apiKey)
-
+boot apiKey (LinodeId i) (ConfigId c) = getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.boot"]
+             & W.param "LinodeID" .~ [T.pack $ show i]
+             & W.param "ConfigID" .~ [T.pack $ show c]
 
 {-|
 List of pending jobs for this Linode instance.
 -}
 jobList :: ApiKey -> LinodeId -> ExceptT LinodeError IO [WaitingJob]
-jobList apiKey (LinodeId i) = do
-  let opts = W.defaults & W.param "LinodeID" .~ [T.pack $ show i]
-                        & W.param "pendingOnly" .~ ["true"]
-  getWith opts (query "linode.job.list" apiKey)
+jobList apiKey (LinodeId i) = getWith $
+  W.defaults & W.param "api_key" .~ [T.pack apiKey]
+             & W.param "api_action" .~ [T.pack "linode.job.list"]
+             & W.param "LinodeID" .~ [T.pack $ show i]
+             & W.param "pendingOnly" .~ ["true"]
 
 {-|
 Wait until all operations on one instance are done.

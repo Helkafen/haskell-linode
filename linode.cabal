@@ -18,7 +18,7 @@ Tested-with:         GHC == 7.10.2
 library
   hs-source-dirs:      src
   exposed-modules:     Network.Linode
-                      ,Network.Linode.Internal
+                      ,Network.Linode.Parsing
                       ,Network.Linode.Types
   build-depends:       base >= 4.7 && < 5
                       ,aeson
@@ -44,10 +44,12 @@ test-suite linode-test
   build-depends:       base
                      , linode
                      , aeson
+                     , bytestring
                      , containers
                      , tasty >= 0.10.1
                      , tasty-hunit >= 0.8
                      , tasty-quickcheck >= 0.8.2
+                     , text
 
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
