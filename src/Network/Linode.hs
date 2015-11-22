@@ -365,7 +365,7 @@ select :: ApiKey -> LinodeCreationOptions -> ExceptT LinodeError IO (Datacenter,
 select apiKey options = (,,,) <$>
   fetchAndSelect (runExceptT $ getDatacenters apiKey) (datacenterSelect options) "datacenter" <*>
   fetchAndSelect (runExceptT $ getDistributions apiKey) (distributionSelect options) "distribution" <*>
-  fetchAndSelect (runExceptT $ getPlans apiKey) (planSelect options) "plan" <*>
+  fetchAndSelect (runExceptT $ getPlans apiKey) (planSelect options . sortBy (comparing hourly)) "plan" <*>
   fetchAndSelect (runExceptT $ getKernels apiKey) (kernelSelect options) "kernel"
 
 
