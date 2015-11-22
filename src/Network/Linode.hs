@@ -139,7 +139,7 @@ createLinode apiKey log options = do
         configure linId (datacenter, distribution, plan, kernel) = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
-          let wait = liftIO (waitUntilCompletion apiKey linId)
+          let wait = liftIO (waitUntilCompletion apiKey linId log)
           printLog $ "Creating disk (" ++ show rootDiskSize ++ " MB)"
           (CreatedDisk diskId _) <- wait >> createDiskFromDistribution apiKey linId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
           printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
@@ -346,16 +346,16 @@ jobList apiKey (LinodeId i) = getWith $
 {-|
 Wait until all operations on one instance are done.
 -}
-waitUntilCompletion :: ApiKey -> LinodeId -> IO()
-waitUntilCompletion apiKey linId = do
+waitUntilCompletion :: ApiKey -> LinodeId -> Bool -> IO()
+waitUntilCompletion apiKey linId log = do
   waitingJobs <- runExceptT $ jobList apiKey linId
   case all waitingJobSuccess <$> waitingJobs of
     Left e -> putStrLn $ "Error during wait:" ++ show e
-    Right True -> putStrLn ""
+    Right True -> when log (putStrLn "")
     Right False -> do
-        putStr "."
+        when log (putStr ".")
         threadDelay (100*1000)
-        waitUntilCompletion apiKey linId
+        waitUntilCompletion apiKey linId log
 
 
 {-|
