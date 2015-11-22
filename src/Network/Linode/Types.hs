@@ -80,7 +80,8 @@ data AccountInfo = AccountInfo {
 
 data Address = Address {
   ip       :: String,
-  rdnsName :: String
+  rdnsName :: String,
+  isPublic :: Bool
 } deriving (Eq, Show, Generic)
 
 data Datacenter = Datacenter {
@@ -289,7 +290,8 @@ instance FromJSON Instance where
 
 
 instance FromJSON Address where
-  parseJSON (Object v) = Address <$> v .: "IPADDRESS" <*> v .: "RDNS_NAME"
+  parseJSON (Object o) = Address <$> o .: "IPADDRESS" <*>  o .: "RDNS_NAME" <*> (isTrue <$> (o .: "ISPUBLIC"))
+    where isTrue = (== (1::Int))
   parseJSON _ = mzero
 
 

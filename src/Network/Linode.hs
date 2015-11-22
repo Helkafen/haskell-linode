@@ -105,8 +105,9 @@ import           Control.Monad            (when)
 import           Control.Monad.IO.Class   (liftIO)
 import qualified Control.Retry            as R
 import           Data.Foldable            (traverse_)
-import           Data.List                (find)
+import           Data.List                (find, sortBy)
 import           Data.Monoid              ((<>))
+import           Data.Ord                 (comparing)
 import qualified Data.Text                as T
 import qualified Network.Wreq             as W
 import           Prelude                  hiding (log)
@@ -372,7 +373,7 @@ select apiKey options = (,,,) <$>
 Pick one public address of the Linode Instance
 -}
 publicAddress :: Linode -> Maybe Address
-publicAddress = headMay . linodeAddresses
+publicAddress = headMay . sortBy (comparing ip) . filter isPublic . linodeAddresses
 
 {-|
 Example of Linode creation. It expects the apiKey and id_rsa.pub files in the current directory.

@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import qualified Data.ByteString.Lazy as B
-import qualified Data.Map             as M
-import qualified Data.Text.Encoding   as E
-import           Network.Linode.Types
+import qualified Data.ByteString.Lazy   as B
+import qualified Data.Map               as M
+import qualified Data.Text.Encoding     as E
 import           Network.Linode.Parsing
+import           Network.Linode.Types
 import           Test.Tasty
 import           Test.Tasty.HUnit
 --import qualified Test.Tasty.QuickCheck   as QC
@@ -61,20 +61,25 @@ testParsingEmptyResponse = assertEqual "Parsing an empty response should fail" x
   where x = parseResponse "" :: Either LinodeError Datacenter
         expectedError = DeserializationError ""
 
+testIpList :: Assertion
+testIpList = assertEqual "Error while parsing the ip list of an instance" x (Right [Address "45.79.212.6" "li1311-6.members.linode.com" True])
+  where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":[{\"IPADDRESSID\":365472,\"RDNS_NAME\":\"li1311-6.members.linode.com\",\"LINODEID\":1483201,\"ISPUBLIC\":1,\"IPADDRESS\":\"45.79.212.6\"}],\"ACTION\":\"linode.ip.list\"}"
+
 tests :: TestTree
 tests = testGroup "Parsing tests" [
-  testCase "Error while parsing an Authentication failure" testAuthenticationError,
-  testCase "Error while parsing a datacenter list" testDatacenterList,
-  testCase "Error while parsing a distribution list" testDistributionList,
-  testCase "Error while parsing a kernel list" testKernelList,
-  testCase "Error while parsing a plan list" testPlanList,
-  testCase "Error while parsing some account info" testAccountInfo,
-  testCase "Error while parsing an instance list" testInstanceList,
-  testCase "Error while parsing the instanceId after a call to linode.create" testInstanceCreation,
-  testCase "Error while parsing the diskId and jobId after creating a disk" testDiskCreation,
-  testCase "Error while parsing a waiting job list" testJobWait,
-  testCase "Parsing no data should fail" testParsingWithNoData,
-  testCase "Parsing an empty response should fail" testParsingEmptyResponse
+  testCase "Parsing an Authentication failure" testAuthenticationError,
+  testCase "Parsing a datacenter list" testDatacenterList,
+  testCase "Parsing a distribution list" testDistributionList,
+  testCase "Parsing a kernel list" testKernelList,
+  testCase "Parsing a plan list" testPlanList,
+  testCase "Parsing some account info" testAccountInfo,
+  testCase "Parsing an instance list" testInstanceList,
+  testCase "Parsing the instanceId after a call to linode.create" testInstanceCreation,
+  testCase "Parsing the diskId and jobId after creating a disk" testDiskCreation,
+  testCase "Parsing a waiting job list" testJobWait,
+  testCase "Parsing no data" testParsingWithNoData,
+  testCase "Parsing an empty response" testParsingEmptyResponse,
+  testCase "Parsing an IP list" testIpList
   ]
 
 
