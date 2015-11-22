@@ -6,7 +6,7 @@ Haskell bindings to the Linode API. Rent servers hourly or monthly.
 
 This package contains some helpers to create and configure [Linode](https://www.linode.com) instances. The API key can be created on the Linode website.
 
-Usage example:
+Usage example. We want to create one Linode instance in Atlanta with 1GB of RAM:
 
 ```
 {-# LANGUAGE OverloadedStrings #-}
