@@ -30,7 +30,7 @@ library
                       ,errors >= 2.0.0
                       ,lens
                       ,process
-                      ,retry >= 0.5
+                      ,retry >= 0.5 && < 0.7
                       ,safe
                       ,text >= 1.2.1
                       ,transformers

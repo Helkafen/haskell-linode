@@ -191,9 +191,10 @@ Wait until an ssh connexion is possible, then add the Linode's ip in known_hosts
 A newly created Linode is unreachable during a few seconds.
 -}
 waitForSSH :: Address -> IO ()
-waitForSSH address = R.recoverAll retryPolicy $ P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
+waitForSSH address = R.recoverAll retryPolicy command
   where retryPolicy = R.constantDelay oneSecond <> R.limitRetries 100
         oneSecond = 1000 * 1000
+        command = P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
 
 
 {-|
