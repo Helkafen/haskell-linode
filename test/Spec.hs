@@ -47,7 +47,7 @@ testDiskCreation = assertEqual "Error while parsing the diskId and jobId after c
   where x = parseResponse "{\"ERRORARRAY\":[],\"ACTION\":\"linode.disk.createFromDistribution\",\"DATA\":{\"JobID\":1298,\"DiskID\":55647}}"
 
 testJobWait :: Assertion
-testJobWait = assertEqual "Error while parsing a waiting job list" (Right [WaitingJob (JobId 29046473) (LinodeId 1450724) True, WaitingJob (JobId 29046472) (LinodeId 1450724) False]) x
+testJobWait = assertEqual "Error while parsing a waiting job list" (Right [WaitingJob (JobId 29046473) (LinodeId 1450724) True "Disk Create From Distribution - Debian 8.1", WaitingJob (JobId 29046472) (LinodeId 1450724) False "Linode Initial Configuration"]) x
   where x = parseResponse "{\"ERRORARRAY\":[],\"DATA\":[{\"HOST_START_DT\":\"\",\"HOST_MESSAGE\":\"\",\"ENTERED_DT\":\"2015-11-08 10:38:15.0\",\"HOST_FINISH_DT\":\"\",\"LABEL\":\"Disk Create From Distribution - Debian 8.1\",\"JOBID\":29046473,\"HOST_SUCCESS\":1,\"ACTION\":\"fs.create.from.distro\",\"LINODEID\":1450724,\"DURATION\":\"\"},{\"HOST_START_DT\":\"\",\"HOST_MESSAGE\":\"\",\"ENTERED_DT\":\"2015-11-08 10:38:14.0\",\"HOST_FINISH_DT\":\"\",\"LABEL\":\"Linode Initial Configuration\",\"JOBID\":29046472,\"HOST_SUCCESS\":\"\",\"ACTION\":\"linode.create\",\"LINODEID\":1450724,\"DURATION\":\"\"}],\"ACTION\":\"linode.job.list\"}"
 
 testParsingWithNoData :: Assertion

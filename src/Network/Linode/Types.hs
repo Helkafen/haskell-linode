@@ -178,7 +178,8 @@ type DeletedLinode = CreatedLinode
 data WaitingJob = WaitingJob {
   waitingJobId       :: JobId,
   waitingJobLinodeId :: LinodeId,
-  waitingJobSuccess  :: Bool
+  waitingJobSuccess  :: Bool,
+  waitingJobLabel    :: Text
 } deriving (Eq, Show)
 
 {-|
@@ -321,8 +322,9 @@ instance FromJSON WaitingJob where
   parseJSON = withObject "person" $ \o -> do
     j <- JobId <$> o .: "JOBID"
     i <- LinodeId <$> o .: "LINODEID"
+    l <- o.: "LABEL"
     success :: Maybe Int  <- optional (o .: "HOST_SUCCESS") -- 1 if ok, "" if not
-    return $ WaitingJob j i (fromMaybe 0 success == 1)
+    return $ WaitingJob j i (fromMaybe 0 success == 1) l
 
 
 instance FromJSON a => FromJSON (Response a) where
