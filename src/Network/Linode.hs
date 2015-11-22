@@ -8,32 +8,37 @@ Stability   : experimental
 
 This package contains some helpers to create and configure <https://www.linode.com/ Linode> instances. They all require an API key, which can be created on the Linode website.
 
-Usage example. We want to create one Linode instance in Atlanta with 2GB of RAM:
+Usage example. We want to create one Linode instance in Atlanta with 1GB of RAM:
 
+> {-# LANGUAGE OverloadedStrings #-}
 > import Network.Linode
 > import Data.List (find)
 > import qualified System.Process as P
+> import Data.Foldable (traverse_)
+> import Data.Monoid ((<>))
 >
 > main :: IO()
 > main = do
 >   apiKey <- fmap (head . words) (readFile "apiKey")
 >   sshPublicKey <- readFile "id_rsa.pub"
->   let log = True
 >   let options = defaultLinodeCreationOptions {
 >     datacenterSelect = find ((=="atlanta") . datacenterName),
->     planSelect = find ((=="Linode 2048") . planName),
+>     planSelect = find ((=="Linode 1024") . planName),
 >     sshKey = Just sshPublicKey
 >   }
->   linode <- createLinode apiKey log options
->   print linode
->   traverse_ (\a -> waitForSSH a >> setup a) (publicAddress linode) -- Setup the instance when the ssh connexion is ready
+>   c <- createLinode apiKey True options
+>   case c of
+>     Left err -> print err
+>     Right linode -> do
+>       traverse_ (\a -> waitForSSH a >> setup a) (publicAddress linode)
+>       print linode
 >
 > setup address = P.callCommand $ "scp yourfile root@" <> ip address <> ":/root"
 
 You should see something like this:
 
-> Creating empty linode (Linode 2048 at atlanta)
-> Creating disk (49024 MB)
+> Creating empty linode (Linode 1024 at atlanta)
+> Creating disk (24448 MB)
 > ...................................
 > Creating swap (128 MB)
 > ...............................
@@ -88,7 +93,8 @@ module Network.Linode
   -- * Examples
   , exampleCreateOneLinode
   , exampleCreateTwoLinodes
-  , testOptions
+
+  , module Network.Linode.Types
 ) where
 
 import           Control.Concurrent       (threadDelay)
@@ -286,7 +292,7 @@ createDiskFromDistribution apiKey (LinodeId i) (DistributionId d) label size pas
                    Just k -> W.param "rootSSHKey" .~ [k]
 
 {-|
-Create a Linode instance with no disk and no configuration. You probably want createLinode.
+Create a Linode instance with no disk and no configuration. You probably want createLinode instead.
 -}
 createDisklessLinode :: ApiKey -> DatacenterId -> PlanId -> PaymentTerm -> ExceptT LinodeError IO CreatedLinode
 createDisklessLinode apiKey (DatacenterId d) (PlanId p) paymentTerm = getWith $
@@ -368,11 +374,17 @@ publicAddress :: Linode -> Maybe Address
 publicAddress = headMay . linodeAddresses
 
 {-|
-Example of Linode creation.
+Example of Linode creation. It expects the apiKey and id_rsa.pub files in the current directory.
 -}
 exampleCreateOneLinode :: IO (Maybe Linode)
 exampleCreateOneLinode = do
-  (apiKey, options) <- testOptions
+  apiKey <- fmap (head . words) (readFile "apiKey")
+  sshPublicKey <- readFile "id_rsa.pub"
+  let options = defaultLinodeCreationOptions {
+    datacenterSelect = find ((=="atlanta") . datacenterName),
+    planSelect = find ((=="Linode 1024") . planName),
+    sshKey = Just sshPublicKey
+  }
   c <- createLinode apiKey True options
   case c of
     Left err -> do
@@ -384,11 +396,17 @@ exampleCreateOneLinode = do
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 
 {-|
-Example of Linodes creation.
+Example of Linodes creation. It expects the apiKey and id_rsa.pub files in the current directory.
 -}
 exampleCreateTwoLinodes :: IO (Maybe [Linode])
 exampleCreateTwoLinodes = do
-  (apiKey, options) <- testOptions
+  sshPublicKey <- readFile "id_rsa.pub"
+  apiKey <- fmap (head . words) (readFile "apiKey")
+  let options = defaultLinodeCreationOptions {
+    datacenterSelect = find ((=="atlanta") . datacenterName),
+    planSelect = find ((=="Linode 1024") . planName),
+    sshKey = Just sshPublicKey
+  }
   c <- createCluster apiKey options 2 True
   case c of
     Left errors -> do
@@ -398,16 +416,3 @@ exampleCreateTwoLinodes = do
       mapM_ (traverse_ (\a -> waitForSSH a >> setup a) . publicAddress) linodes
       return (Just linodes)
   where setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
-
-{-|
-A set of options for the examples. It expects the apiKey and id_rsa.pub files in the current directory.
--}
-testOptions :: IO (ApiKey, LinodeCreationOptions)
-testOptions = do
-  apiKey <- fmap (head . words) (readFile "apiKey")
-  sshPublicKey <- readFile "id_rsa.pub"
-  return (apiKey, defaultLinodeCreationOptions {
-    datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 1024") . planName),
-    sshKey = Just sshPublicKey
-  })

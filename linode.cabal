@@ -1,5 +1,5 @@
 name:                linode
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Bindings to the Linode API
 description:         Haskell bindings to the Linode API. Rent servers hourly or monthly.
                      .
@@ -13,13 +13,14 @@ maintainer:          arnaudpourseb@gmail.com
 category:            Network, Cloud, Distributed Computing
 build-type:          Simple
 cabal-version:       >=1.10
-Tested-with:         GHC == 7.10.1, GHC == 7.10.2
+Tested-with:         GHC == 7.10.2
 
 library
   hs-source-dirs:      src
   exposed-modules:     Network.Linode
                       ,Network.Linode.Parsing
                       ,Network.Linode.Types
+  other-modules:       Network.Linode.Internal
   build-depends:       base >= 4.7 && < 5
                       ,aeson
                       ,async

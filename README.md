@@ -9,23 +9,29 @@ This package contains some helpers to create and configure [Linode](https://www.
 Usage example:
 
 ```
+{-# LANGUAGE OverloadedStrings #-}
+
 import Network.Linode
 import Data.List (find)
 import qualified System.Process as P
+import Data.Foldable (traverse_)
+import Data.Monoid ((<>))
 
 main :: IO()
 main = do
   apiKey <- fmap (head . words) (readFile "apiKey")
   sshPublicKey <- readFile "id_rsa.pub"
-  let log = True
   let options = defaultLinodeCreationOptions {
     datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 2048") . planName),
+    planSelect = find ((=="Linode 1024") . planName),
     sshKey = Just sshPublicKey
   }
-  l <- createLinode apiKey log options
-  print l
-  traverse_ (\a -> waitForSSH a >> setup a) (publicAddress l) -- Setup the instance when the ssh connexion is ready
+  c <- createLinode apiKey True options
+  case c of
+    Left err -> print err
+    Right linode -> do
+      traverse_ (\a -> waitForSSH a >> setup a) (publicAddress linode)
+      print linode
 
-setup address = P.callCommand $ "scp yourfile root@" <> ip address <> ":/root"
+setup address = P.callCommand $ "scp TODO root@" <> ip address <> ":/root"
 ```
