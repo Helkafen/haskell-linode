@@ -1,4 +1,7 @@
 # haskell-linode
+
+[![Build Status](https://travis-ci.org/Helkafen/haskell-linode.svg?branch=master)](https://travis-ci.org/Helkafen/haskell-linode)
+
 Haskell bindings to the Linode API. Rent servers hourly or monthly.
 
 This package contains some helpers to create and configure [Linode](https://www.linode.com) instances. The API key can be created on the Linode website.
