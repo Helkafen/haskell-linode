@@ -39,13 +39,12 @@ You should see something like this:
 
 > Creating empty linode (Linode 1024 at atlanta)
 > Creating disk (24448 MB)
-> ...................................
+> ..............
 > Creating swap (128 MB)
-> ...............................
+> ........
 > Creating config
-> .......
 > Booting
-> ....................................
+> ......................................
 > Booted linode 1481198
 
 And get something like that:
@@ -140,16 +139,15 @@ createLinode apiKey log options = do
           let swapSize = swapAmount options
           let rootDiskSize = (1024 * disk plan) - swapSize
           let wait = liftIO (waitUntilCompletion apiKey linId log)
-          printLog $ "Creating disk (" ++ show rootDiskSize ++ " MB)"
-          (CreatedDisk diskId _) <- wait >> createDiskFromDistribution apiKey linId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
-          printLog $ "Creating swap (" ++ show swapSize ++ " MB)"
-          (CreatedDisk swapId _) <- wait >> createSwapDisk apiKey linId "swap" swapSize
+          (CreatedDisk diskId _) <- createDiskFromDistribution apiKey linId (distributionId distribution) (diskLabel options) rootDiskSize (password options) (sshKey options)
+          printLog ("Creating disk (" ++ show rootDiskSize ++ " MB)") >> wait
+          (CreatedDisk swapId _) <- createSwapDisk apiKey linId "swap" swapSize
+          printLog ("Creating swap (" ++ show swapSize ++ " MB)") >> wait
+          (CreatedConfig configId)  <- maybeOr (CreatedConfig <$> config options) (createConfig apiKey linId (kernelId kernel) "profile" [diskId, swapId])
           printLog "Creating config"
-          (CreatedConfig configId)  <- wait >> maybeOr (CreatedConfig <$> config options) (createConfig apiKey linId (kernelId kernel) "profile" [diskId, swapId])
-          printLog "Booting"
-          (BootedInstance _) <- wait >> boot apiKey linId configId
-          printLog "Still booting"
-          addresses <- wait >> getIpList apiKey linId
+          (BootedInstance _) <- boot apiKey linId configId
+          printLog "Booting" >> wait
+          addresses <- getIpList apiKey linId
           printLog $ "Booted linode " ++ show (unLinodeId linId)
           return $ Linode linId configId (datacenterName datacenter) (password options) addresses
         printLog l = when log (liftIO $ putStrLn l)
