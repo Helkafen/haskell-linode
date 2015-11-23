@@ -10,7 +10,6 @@ This package contains some helpers to create and configure <https://www.linode.c
 
 Usage example. We want to create one Linode instance in Atlanta with 1GB of RAM:
 
-> {-# LANGUAGE OverloadedStrings #-}
 > import Network.Linode
 > import Data.List (find)
 > import qualified System.Process as P
@@ -361,9 +360,9 @@ Select a Datacenter, a Plan, a Linux distribution and kernel from all Linode off
 -}
 select :: ApiKey -> LinodeCreationOptions -> ExceptT LinodeError IO (Datacenter, Distribution, Plan, Kernel)
 select apiKey options = (,,,) <$>
-  fetchAndSelect (runExceptT $ getDatacenters apiKey) (find ((== datacenterChoice options) . datacenterName)) "datacenter" <*>
+  fetchAndSelect (runExceptT $ getDatacenters apiKey) (find ((== T.pack (datacenterChoice options)) . datacenterName)) "datacenter" <*>
   fetchAndSelect (runExceptT $ getDistributions apiKey) (distributionSelect options) "distribution" <*>
-  fetchAndSelect (runExceptT $ getPlans apiKey) (find ((== planChoice options) . planName)) "plan" <*>
+  fetchAndSelect (runExceptT $ getPlans apiKey) (find ((== T.pack (planChoice options)) . planName)) "plan" <*>
   fetchAndSelect (runExceptT $ getKernels apiKey) (kernelSelect options) "kernel"
 
 

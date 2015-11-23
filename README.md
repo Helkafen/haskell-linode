@@ -9,8 +9,6 @@ This package contains some helpers to create and configure [Linode](https://www.
 Usage example. We want to create one Linode instance in Atlanta with 1GB of RAM:
 
 ```
-{-# LANGUAGE OverloadedStrings #-}
-
 import Network.Linode
 import Data.List (find)
 import qualified System.Process as P
