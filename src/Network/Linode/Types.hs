@@ -18,8 +18,8 @@ import           Safe                (readMay)
 type ApiKey = String
 
 data LinodeCreationOptions = LinodeCreationOptions {
-  datacenterSelect   :: [Datacenter] -> Maybe Datacenter,
-  planSelect         :: [Plan] -> Maybe Plan,
+  datacenterChoice   :: Text,
+  planChoice         :: Text,
   kernelSelect       :: [Kernel] -> Maybe Kernel,
   distributionSelect :: [Distribution] -> Maybe Distribution,
   paymentChoice      :: PaymentTerm,

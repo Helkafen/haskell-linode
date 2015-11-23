@@ -22,8 +22,8 @@ Usage example. We want to create one Linode instance in Atlanta with 1GB of RAM:
 >   apiKey <- fmap (head . words) (readFile "apiKey")
 >   sshPublicKey <- readFile "id_rsa.pub"
 >   let options = defaultLinodeCreationOptions {
->     datacenterSelect = find ((=="atlanta") . datacenterName),
->     planSelect = find ((=="Linode 1024") . planName),
+>     datacenterChoice = "atlanta",
+>     planChoice = "Linode 1024",
 >     sshKey = Just sshPublicKey
 >   }
 >   c <- createLinode apiKey True options
@@ -171,8 +171,8 @@ Default options to create an instance. Please customize the security options.
 -}
 defaultLinodeCreationOptions :: LinodeCreationOptions
 defaultLinodeCreationOptions = LinodeCreationOptions {
-  datacenterSelect = find ((=="london") . datacenterName),
-  planSelect = find ((=="Linode 1024") . planName),
+  datacenterChoice = "london",
+  planChoice = "Linode 1024",
   kernelSelect = find (("Latest 64 bit" `T.isPrefixOf`) . kernelName),
   distributionSelect = find ((=="Debian 8.1") . distributionName),
   paymentChoice = OneMonth,
@@ -361,9 +361,9 @@ Select a Datacenter, a Plan, a Linux distribution and kernel from all Linode off
 -}
 select :: ApiKey -> LinodeCreationOptions -> ExceptT LinodeError IO (Datacenter, Distribution, Plan, Kernel)
 select apiKey options = (,,,) <$>
-  fetchAndSelect (runExceptT $ getDatacenters apiKey) (datacenterSelect options) "datacenter" <*>
+  fetchAndSelect (runExceptT $ getDatacenters apiKey) (find ((== datacenterChoice options) . datacenterName)) "datacenter" <*>
   fetchAndSelect (runExceptT $ getDistributions apiKey) (distributionSelect options) "distribution" <*>
-  fetchAndSelect (runExceptT $ getPlans apiKey) (planSelect options . sortBy (comparing hourly)) "plan" <*>
+  fetchAndSelect (runExceptT $ getPlans apiKey) (find ((== planChoice options) . planName)) "plan" <*>
   fetchAndSelect (runExceptT $ getKernels apiKey) (kernelSelect options) "kernel"
 
 
@@ -381,8 +381,8 @@ exampleCreateOneLinode = do
   apiKey <- fmap (head . words) (readFile "apiKey")
   sshPublicKey <- readFile "id_rsa.pub"
   let options = defaultLinodeCreationOptions {
-    datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 1024") . planName),
+    datacenterChoice = "atlanta",
+    planChoice = "Linode 1024",
     sshKey = Just sshPublicKey
   }
   c <- createLinode apiKey True options
@@ -403,8 +403,8 @@ exampleCreateTwoLinodes = do
   sshPublicKey <- readFile "id_rsa.pub"
   apiKey <- fmap (head . words) (readFile "apiKey")
   let options = defaultLinodeCreationOptions {
-    datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 1024") . planName),
+    datacenterChoice = "atlanta",
+    planChoice = "Linode 1024",
     sshKey = Just sshPublicKey
   }
   c <- createCluster apiKey options 2 True

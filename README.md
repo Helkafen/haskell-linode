@@ -22,8 +22,8 @@ main = do
   apiKey <- fmap (head . words) (readFile "apiKey")
   sshPublicKey <- readFile "id_rsa.pub"
   let options = defaultLinodeCreationOptions {
-    datacenterSelect = find ((=="atlanta") . datacenterName),
-    planSelect = find ((=="Linode 1024") . planName),
+    datacenterChoice = "atlanta",
+    planChoice = "Linode 1024",
     sshKey = Just sshPublicKey
   }
   c <- createLinode apiKey True options
