@@ -173,8 +173,8 @@ defaultLinodeCreationOptions :: LinodeCreationOptions
 defaultLinodeCreationOptions = LinodeCreationOptions {
   datacenterChoice = "london",
   planChoice = "Linode 1024",
-  kernelSelect = find (("Latest 64 bit" `T.isPrefixOf`) . kernelName),
-  distributionSelect = find ((=="Debian 8.1") . distributionName),
+  kernelSelect = find (("Latest 64 bit" `T.isPrefixOf`) . kernelName), -- Most recent 64 bits kernel
+  distributionSelect = lastMay . sortBy (comparing distributionName) . filter ((T.pack "Debian" `T.isPrefixOf`) . distributionName), -- Most recent Debian
   paymentChoice = OneMonth,
   swapAmount = 128,
   password = "We4kP4ssw0rd",
