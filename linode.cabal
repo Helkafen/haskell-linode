@@ -1,5 +1,5 @@
 name:                linode
-version:             0.1.0.4
+version:             0.2.0.0
 synopsis:            Bindings to the Linode API
 description:         Haskell bindings to the Linode API. Rent servers hourly or monthly.
                      .
