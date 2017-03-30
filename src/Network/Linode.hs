@@ -192,7 +192,7 @@ waitForSSH :: Address -> IO ()
 waitForSSH address = R.recoverAll retryPolicy command
   where retryPolicy = R.constantDelay oneSecond <> R.limitRetries 100
         oneSecond = 1000 * 1000
-        command = P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
+        command _ = P.callCommand $ "ssh -q -o StrictHostKeyChecking=no root@" <> ip address <> " exit"
 
 
 {-|
